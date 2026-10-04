@@ -224,6 +224,50 @@ api.post("/cards/:id/favorite", async (c) => {
   return c.json(await loadCard(db, id));
 });
 
+// ---------- Löschen / Papierkorb ----------
+
+api.delete("/cards/:id", async (c) => {
+  const db = c.env.DB;
+  const card = await loadCard(db, idParam(c));
+  if (!card) return bad(c, "Karte nicht gefunden", 404);
+  await db.prepare("UPDATE cards SET deleted_at = ?, deleted_by = ?, updated_at = ? WHERE id = ?").bind(nowIso(), c.get("user"), nowIso(), card.id).run();
+  await db.prepare("DELETE FROM votes WHERE card_id = ?").bind(card.id).run();
+  await addHistory(db, card.id, c.get("user"), "gelöscht", "In den Papierkorb verschoben");
+  return c.json({ ok: true });
+});
+
+api.post("/cards/:id/restore", async (c) => {
+  const db = c.env.DB;
+  const id = idParam(c);
+  await db.prepare("UPDATE cards SET deleted_at = NULL, deleted_by = NULL, updated_at = ? WHERE id = ?").bind(nowIso(), id).run();
+  await addHistory(db, id, c.get("user"), "wiederhergestellt", "Aus dem Papierkorb geholt");
+  return c.json(await loadCard(db, id));
+});
+
+api.get("/trash", async (c) => {
+  const cards = await loadCards(c.env.DB, "c.deleted_at IS NOT NULL");
+  return c.json(cards.sort((a, b) => (b.deleted_at ?? "").localeCompare(a.deleted_at ?? "")));
+});
+
+/** Endgültig löschen – samt Kommentaren, Checkliste, Fotos, Verlauf und KI-Analysen */
+export async function purgeCard(env: AppEnv["Bindings"], id: number): Promise<void> {
+  const db = env.DB;
+  if (env.BACKUPS) {
+    const keys = await db.prepare("SELECT r2_key FROM attachments WHERE card_id = ? AND r2_key IS NOT NULL").bind(id).all<{ r2_key: string }>();
+    for (const k of keys.results) await env.BACKUPS.delete(k.r2_key);
+  }
+  await db.batch([
+    db.prepare("UPDATE cards SET merged_into = NULL WHERE merged_into = ?").bind(id),
+    ...["attachments", "comments", "checklist_items", "favorites", "votes", "history", "ai_analyses"].map((t) => db.prepare(`DELETE FROM ${t} WHERE card_id = ?`).bind(id)),
+    db.prepare("DELETE FROM cards WHERE id = ? AND deleted_at IS NOT NULL").bind(id),
+  ]);
+}
+
+api.delete("/trash/:id", async (c) => {
+  await purgeCard(c.env, idParam(c));
+  return c.json({ ok: true });
+});
+
 // ---------- Kommentare ----------
 
 api.post("/cards/:id/comments", async (c) => {

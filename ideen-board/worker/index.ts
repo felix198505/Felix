@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { api } from "./api";
+import { api, purgeCard } from "./api";
 import { attachmentsApi } from "./attachments";
 import { digestApi, weeklyRun } from "./digest";
 import { insightsApi } from "./insights";
@@ -37,10 +37,17 @@ app.onError((err, c) => {
   return c.json({ error: "Serverfehler: " + err.message }, 500);
 });
 
+/** Karten, die länger als 30 Tage im Papierkorb liegen, endgültig löschen */
+async function emptyTrash(env: Env) {
+  const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
+  const old = await env.DB.prepare("SELECT id FROM cards WHERE deleted_at IS NOT NULL AND deleted_at < ?").bind(cutoff).all<{ id: number }>();
+  for (const r of old.results) await purgeCard(env, r.id);
+}
+
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
-    if (event.cron === "17 2 * * *") ctx.waitUntil(nightlyBackup(env));
+    if (event.cron === "17 2 * * *") ctx.waitUntil(nightlyBackup(env).then(() => emptyTrash(env)));
     else if (event.cron === "47 5 * * 1") ctx.waitUntil(weeklyRun(env));
     else ctx.waitUntil(retryPending(env));
   },

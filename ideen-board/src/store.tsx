@@ -11,11 +11,13 @@ interface Store {
   reload: () => Promise<void>;
   /** Führt eine Änderung aus, zeigt Fehler an und lädt das Board neu */
   run: <T>(fn: () => Promise<T>, okMsg?: string) => Promise<T | undefined>;
-  toast: (msg: string, err?: boolean) => void;
+  toast: (msg: string, err?: boolean, action?: ToastAction) => void;
   openCard: (id: number | null) => void;
   openCardId: number | null;
   askText: (title: string, opts?: { placeholder?: string; initial?: string; okLabel?: string }) => Promise<string | null>;
 }
+
+type ToastAction = { label: string; run: () => void };
 
 const Ctx = createContext<Store | null>(null);
 
@@ -29,7 +31,7 @@ const POLL_MS = 5000;
 
 export function StoreProvider({ initial, children }: { initial: BoardData; children: ReactNode }) {
   const [data, setData] = useState(initial);
-  const [toastMsg, setToastMsg] = useState<{ msg: string; err: boolean } | null>(null);
+  const [toastMsg, setToastMsg] = useState<{ msg: string; err: boolean; action?: ToastAction } | null>(null);
   const [openCardId, setOpenCardId] = useState<number | null>(null);
   const [dialog, setDialog] = useState<null | {
     title: string;
@@ -41,10 +43,10 @@ export function StoreProvider({ initial, children }: { initial: BoardData; child
   const revRef = useRef(initial.rev);
   const toastTimer = useRef<number>(undefined);
 
-  const toast = useCallback((msg: string, err = false) => {
-    setToastMsg({ msg, err });
+  const toast = useCallback((msg: string, err = false, action?: ToastAction) => {
+    setToastMsg({ msg, err, action });
     window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToastMsg(null), err ? 5000 : 2200);
+    toastTimer.current = window.setTimeout(() => setToastMsg(null), err || action ? 6000 : 2200);
   }, []);
 
   const reload = useCallback(async () => {
@@ -114,7 +116,22 @@ export function StoreProvider({ initial, children }: { initial: BoardData; child
   return (
     <Ctx.Provider value={value}>
       {children}
-      {toastMsg && <div className={"toast" + (toastMsg.err ? " err" : "")}>{toastMsg.msg}</div>}
+      {toastMsg && (
+        <div className={"toast" + (toastMsg.err ? " err" : "")}>
+          {toastMsg.msg}
+          {toastMsg.action && (
+            <button
+              className="btn small toast-action"
+              onClick={() => {
+                toastMsg.action!.run();
+                setToastMsg(null);
+              }}
+            >
+              {toastMsg.action.label}
+            </button>
+          )}
+        </div>
+      )}
       {dialog && (
         <TextDialog
           {...dialog}

@@ -87,7 +87,7 @@ function assemble(
   }));
 }
 
-export async function loadCards(db: D1Database, where = "c.merged_into IS NULL", binds: unknown[] = []): Promise<Card[]> {
+export async function loadCards(db: D1Database, where = "c.merged_into IS NULL AND c.deleted_at IS NULL", binds: unknown[] = []): Promise<Card[]> {
   const [rows, favs, cl, cc, votes] = await db.batch([
     db
       .prepare(

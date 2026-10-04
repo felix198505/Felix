@@ -233,6 +233,8 @@ export function SettingsView() {
 
         <AccountSection />
 
+        <Trash />
+
         <div className="section">
           <h3>Export & Datensicherung</h3>
           <div className="row wrap">
@@ -246,7 +248,7 @@ export function SettingsView() {
               Alles exportieren (JSON-Backup)
             </a>
           </div>
-          <p className="small muted">Zusätzlich wird jede Nacht automatisch eine Sicherung bei Cloudflare (R2) abgelegt und 30 Tage aufbewahrt.</p>
+          <p className="small muted">Zusätzlich wird jede Nacht automatisch eine Sicherung bei Cloudflare abgelegt und 30 Tage aufbewahrt.</p>
           <Backups />
         </div>
       </div>
@@ -279,6 +281,55 @@ function Backups() {
           <a href={`/api/backups/${b.key}`}>{b.key}</a> <span className="muted">({Math.round(b.size / 1024)} KB)</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function Trash() {
+  const { data, run, openCard } = useStore();
+  const [list, setList] = useState<Card[] | null>(null);
+  const load = () => api<Card[]>("/trash").then(setList).catch(() => setList([]));
+  useEffect(() => {
+    if (list !== null) load();
+  }, [data.rev]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="section">
+      <h3>Papierkorb</h3>
+      <p className="small muted">Gelöschte Karten bleiben 30 Tage wiederherstellbar und werden danach automatisch endgültig entfernt.</p>
+      {list === null ? (
+        <button className="btn small" onClick={load}>
+          Papierkorb öffnen
+        </button>
+      ) : list.length === 0 ? (
+        <div className="small muted">Der Papierkorb ist leer.</div>
+      ) : (
+        list.map((c) => (
+          <div key={c.id} className="trash-row">
+            <span className="grow">
+              <a href="#" onClick={(e) => (e.preventDefault(), openCard(c.id))}>
+                {c.title}
+              </a>
+              <span className="small muted">
+                {" "}
+                · gelöscht von {userName(c.deleted_by)} am {fmtDate(c.deleted_at)}
+              </span>
+            </span>
+            <button className="btn small" onClick={() => run(() => api(`/cards/${c.id}/restore`, { method: "POST" }), "Wiederhergestellt").then(load)}>
+              Wiederherstellen
+            </button>
+            <button
+              className="btn small danger"
+              onClick={() =>
+                confirm(`„${c.title}“ endgültig löschen? Kommentare, Fotos, Verlauf und KI-Analysen gehen verloren.`) &&
+                run(() => api(`/trash/${c.id}`, { method: "DELETE" }), "Endgültig gelöscht").then(load)
+              }
+            >
+              Endgültig löschen
+            </button>
+          </div>
+        ))
+      )}
     </div>
   );
 }

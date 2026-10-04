@@ -43,7 +43,7 @@ export function kickBrainstorm(c: Context<AppEnv>, brainstormId: number): void {
   if (!c.env.ANTHROPIC_API_KEY) return;
   c.executionCtx.waitUntil(
     (async () => {
-      const ids = await c.env.DB.prepare("SELECT id FROM cards WHERE brainstorm_id = ? AND ai_status = 'pending' AND merged_into IS NULL")
+      const ids = await c.env.DB.prepare("SELECT id FROM cards WHERE brainstorm_id = ? AND ai_status = 'pending' AND merged_into IS NULL AND deleted_at IS NULL")
         .bind(brainstormId)
         .all<{ id: number }>();
       await enqueue(c.env, [{ type: "brainstorm", id: brainstormId }, ...ids.results.map((r): AiJob => ({ type: "card", id: r.id, by: null }))]);
@@ -75,7 +75,7 @@ export async function retryPending(env: Env): Promise<void> {
   await db.prepare("UPDATE cards SET ai_status = 'error', ai_error = 'Abgebrochen' WHERE ai_status = 'running' AND updated_at < ?").bind(stale).run();
   const cards = await db
     .prepare(
-      `SELECT id FROM cards WHERE merged_into IS NULL AND ai_status IN ('pending', 'error') AND ai_attempts < ? AND updated_at < ?
+      `SELECT id FROM cards WHERE merged_into IS NULL AND deleted_at IS NULL AND ai_status IN ('pending', 'error') AND ai_attempts < ? AND updated_at < ?
        ORDER BY updated_at LIMIT 4`,
     )
     .bind(MAX_ATTEMPTS, recent)
@@ -294,7 +294,7 @@ function boardOverview(cards: Card[], selfId: number): string {
 export async function analyzeCard(env: Env, cardId: number, requestedBy: string | null): Promise<void> {
   const db = env.DB;
   const card = await loadCard(db, cardId);
-  if (!card || card.merged_into || card.ai_status === "deferred") return;
+  if (!card || card.merged_into || card.deleted_at || card.ai_status === "deferred") return;
 
   const over = await budgetExceeded(db);
   if (over) {
@@ -452,7 +452,7 @@ export async function analyzeBrainstorm(env: Env, id: number): Promise<void> {
   await db.prepare("UPDATE brainstorms SET ai_status = 'running' WHERE id = ?").bind(id).run();
   await bumpRev(db);
   try {
-    const ideas = await loadCards(db, "c.brainstorm_id = ? AND c.merged_into IS NULL", [id]);
+    const ideas = await loadCards(db, "c.brainstorm_id = ? AND c.merged_into IS NULL AND c.deleted_at IS NULL", [id]);
     const context = await getSetting(db, "company_context");
     const out = await runUntilTool(env, {
       system: SYSTEM_RULES.replace(/- Schließe die Arbeit immer ab.*$/m, "- Schließe die Arbeit immer ab, indem du das Werkzeug „buendelung_speichern“ genau einmal aufrufst."),

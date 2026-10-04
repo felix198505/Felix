@@ -146,6 +146,7 @@ Es gibt drei Sicherungsebenen:
   - sonst Nutzen − Aufwand: ≥ 2 Hoch, 0–1 Mittel, < 0 Niedrig
 - **Verlauf:** Jede Änderung wird pro Karte mit Name und Zeit festgehalten.
 - **Zusammenführen:** Kommentare und Checklisten werden übernommen. Die zweite Karte wird archiviert, nicht gelöscht.
+- **Löschen:** In der Karte oben auf 🗑. Die Karte kommt in den Papierkorb (⚙ Einstellungen). Direkt danach geht „Rückgängig“, sonst 30 Tage lang „Wiederherstellen“. Danach wird sie automatisch endgültig gelöscht. „Endgültig löschen“ im Papierkorb geht auch sofort.
 - **Live-Abgleich:** Änderungen des anderen erscheinen nach spätestens 5 Sekunden ohne Neuladen.
 - **Spracheingabe (🎙):** in der Schnellerfassung, im Brainstorming und bei Kommentaren. Nutzt die Spracherkennung von Chrome bzw. Safari; Mikrofon-Zugriff einmal erlauben.
 - **Fotos:** in jeder Karte über „📷 Foto“ aufnehmen oder hochladen. Fotos werden automatisch verkleinert. Die KI bezieht die neuesten 3 Fotos bei der Analyse mit ein.

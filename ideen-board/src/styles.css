@@ -133,7 +133,7 @@ label.field { display: block; font-size: 11px; color: var(--muted); margin-botto
   box-shadow: 0 0 24px -4px rgba(52, 245, 140, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 .brand .name span { color: var(--green); }
-.quick { flex: 1 1 320px; display: flex; gap: 6px; position: relative; }
+.quick { flex: 1 1 200px; display: flex; gap: 6px; position: relative; }
 .quick input { font-size: 16px; padding-left: 38px; border-radius: 13px; background: rgba(5, 10, 7, 0.7); }
 .quick::before { content: "✦"; position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--green); pointer-events: none; text-shadow: 0 0 10px var(--green); }
 .nav { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 3px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); border-radius: 14px; }
@@ -395,6 +395,11 @@ label.field { display: block; font-size: 11px; color: var(--muted); margin-botto
   .page h1 { font-size: 24px; }
 }
 
+
+/* ---------- Papierkorb ---------- */
+.trash-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.toast { display: flex; align-items: center; gap: 12px; }
+.toast-action { color: var(--green); border-color: rgba(52, 245, 140, 0.4); }
 
 /* ---------- Spracheingabe ---------- */
 .mic { flex: none; width: 42px; padding: 7px 0; font-size: 16px; }

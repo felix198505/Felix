@@ -59,6 +59,14 @@ export function CardModal({ id }: { id: number }) {
     await run(() => api(`/cards/${id}/move`, { body: { column_key: col, reject_reason } }), `Nach „${columnTitle(col)}“ verschoben`);
   }
 
+  async function remove() {
+    if (!confirm(`„${card.title}“ löschen?\nDie Karte kommt in den Papierkorb und lässt sich 30 Tage lang wiederherstellen.`)) return;
+    const ok = await run(() => api(`/cards/${id}`, { method: "DELETE" }));
+    if (ok === undefined) return;
+    openCard(null);
+    toast("Karte gelöscht", false, { label: "Rückgängig", run: () => run(() => api(`/cards/${id}/restore`, { method: "POST" }), "Wiederhergestellt") });
+  }
+
   async function mergeWith(sourceId: number): Promise<boolean> {
     const src = cardsById.get(sourceId);
     if (!src || !confirm(`„${src.title}“ in diese Karte zusammenführen?\nKommentare und Checkliste werden übernommen, die andere Karte wird archiviert (nicht gelöscht).`)) return false;
@@ -80,11 +88,28 @@ export function CardModal({ id }: { id: number }) {
             onBlur={(e) => e.target.value.trim() && e.target.value !== card.title && patch({ title: e.target.value })}
             onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
           />
+          {!card.deleted_at && (
+            <button className="btn ghost" onClick={remove} title="Karte löschen" aria-label="Karte löschen">
+              🗑
+            </button>
+          )}
           <button className="btn" onClick={() => openCard(null)} aria-label="Schließen">
             ✕
           </button>
         </div>
         <div className="modal-body">
+          {detail.card.deleted_at && (
+            <div className="list-card" style={catVar("var(--red)")}>
+              <div className="row wrap">
+                <span className="grow">
+                  🗑 Im Papierkorb – gelöscht von {userName(detail.card.deleted_by)} am {fmtDate(detail.card.deleted_at)}. Wird nach 30 Tagen endgültig entfernt.
+                </span>
+                <button className="btn small primary" onClick={() => run(() => api(`/cards/${id}/restore`, { method: "POST" }), "Wiederhergestellt").then(load)}>
+                  Wiederherstellen
+                </button>
+              </div>
+            </div>
+          )}
           {merged && (
             <div className="list-card" style={catVar("var(--amber)")}>
               Diese Karte wurde in{" "}

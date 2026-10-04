@@ -97,6 +97,8 @@ export interface Card {
   follow_up: string | null;
   reject_reason: string;
   column_since: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
   merged_into: number | null;
   brainstorm_id: number | null;
   ai_status: AiStatus;
