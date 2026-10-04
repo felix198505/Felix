@@ -35,7 +35,7 @@ Die einfachste Variante: Cloudflare holt den Code direkt aus GitHub und veröffe
 2. Links **Workers & Pages** → **Erstellen** → **Repository importieren** wählen.
 3. GitHub verbinden und das Repository **felix198505/Felix** auswählen.
 4. Einstellungen:
-   - **Projektname:** `ideen-board`
+   - **Projektname:** `felix` (muss mit `name` in `wrangler.jsonc` übereinstimmen)
    - **Produktions-Branch:** der Branch mit dem Ideen-Board (z. B. `main`, sobald zusammengeführt)
    - **Root-Verzeichnis (Erweitert):** `ideen-board`
    - **Build-Befehl:** leer lassen
@@ -46,7 +46,7 @@ Die einfachste Variante: Cloudflare holt den Code direkt aus GitHub und veröffe
 
 ### Schritt 3: Passwörter und API-Schlüssel hinterlegen
 
-Im Cloudflare-Dashboard: **Workers & Pages** → **ideen-board** → **Einstellungen** → **Variablen und Geheimnisse** → **Hinzufügen**. Für jeden Eintrag den Typ **Geheimnis (Secret)** wählen:
+Im Cloudflare-Dashboard: **Workers & Pages** → **felix** → **Einstellungen** → **Variablen und Geheimnisse** → **Hinzufügen**. Für jeden Eintrag den Typ **Geheimnis (Secret)** wählen:
 
 | Name | Wert |
 |---|---|
@@ -65,7 +65,7 @@ Speichern. Die Werte gelten sofort und stehen nirgends im Code.
 
 ### Schritt 4: Loslegen
 
-1. Die Adresse steht im Dashboard beim Worker, z. B. `https://ideen-board.<dein-name>.workers.dev`.
+1. Die Adresse steht im Dashboard beim Worker, z. B. `https://felix.<dein-name>.workers.dev`.
 2. Anmelden.
 3. ⚙ Einstellungen → **Beispielkarten anlegen**. Die KI analysiert die 5 Karten innerhalb von 1–2 Minuten.
 4. **Auf dem Handy als App installieren:**
