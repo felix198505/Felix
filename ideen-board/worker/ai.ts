@@ -9,3 +9,5 @@ export function kickAnalysis(_c: Context<AppEnv>, _cardId: number, _requestedBy:
 export function kickBrainstorm(_c: Context<AppEnv>, _brainstormId: number): void {}
 
 export async function applyAiItem(_c: Context<AppEnv>, _a: AiAnalysis, _itemId: string, _text?: string): Promise<void> {}
+
+export async function retryPending(_env: import("./env").Env): Promise<void> {}

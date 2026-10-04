@@ -1,24 +1,24 @@
 import { Hono } from "hono";
 import { api } from "./api";
+import { login, logout, requireAuth } from "./auth";
+import { nightlyBackup } from "./backup";
 import { bumpRev } from "./db";
+import { retryPending } from "./ai";
 import type { AppEnv, Env } from "./env";
-import { USERS } from "../shared/types";
 
 const app = new Hono<AppEnv>();
 
-// Etappe 1: Nutzer wird lokal über eine Auswahl gesetzt (Header). Etappe 2 ersetzt das durch echten Login.
-app.use("/api/*", async (c, next) => {
-  const u = c.req.header("x-user") ?? "felix";
-  c.set("user", USERS.some((x) => x.id === u) ? u : "felix");
-  await next();
-});
+// Ohne gültige Anmeldung gibt die API nichts heraus
+app.use("/api/*", requireAuth);
 
 // Jede erfolgreiche Änderung erhöht den Änderungszähler → andere Geräte laden automatisch nach
 app.use("/api/*", async (c, next) => {
   await next();
-  if (c.req.method !== "GET" && c.res.status < 400) await bumpRev(c.env.DB);
+  if (c.req.method !== "GET" && c.res.status < 400 && !["/api/login", "/api/logout"].includes(c.req.path)) await bumpRev(c.env.DB);
 });
 
+app.post("/api/login", login);
+app.post("/api/logout", logout);
 app.route("/api", api);
 
 app.onError((err, c) => {
@@ -28,5 +28,8 @@ app.onError((err, c) => {
 
 export default {
   fetch: app.fetch,
-  async scheduled(_event: ScheduledController, _env: Env, _ctx: ExecutionContext) {},
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    if (event.cron === "17 2 * * *") ctx.waitUntil(nightlyBackup(env));
+    else ctx.waitUntil(retryPending(env));
+  },
 } satisfies ExportedHandler<Env>;

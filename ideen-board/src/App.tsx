@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { PRIORITY_LABEL, PRIORITY_ORDER, USERS } from "../shared/types";
+import { PRIORITY_LABEL, PRIORITY_ORDER, USERS, userName } from "../shared/types";
 import type { BoardData } from "../shared/types";
 import { api, onUnauthorized } from "./api";
+import type { ApiError } from "./api";
 import { StoreProvider, useStore } from "./store";
 import { EMPTY_FILTERS, filtersActive, isDue } from "./util";
 import type { Filters } from "./util";
@@ -23,19 +24,27 @@ function useHash(): [string, (h: string) => void] {
 export default function App() {
   const [data, setData] = useState<BoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [needLogin, setNeedLogin] = useState(false);
 
   async function load() {
     try {
       setError(null);
       setData(await api<BoardData>("/board"));
+      setNeedLogin(false);
     } catch (e) {
-      setError((e as Error).message);
+      if ((e as ApiError).status === 401) setNeedLogin(true);
+      else setError((e as Error).message);
     }
   }
   useEffect(() => {
-    onUnauthorized(() => setData(null));
+    onUnauthorized(() => {
+      setData(null);
+      setNeedLogin(true);
+    });
     load();
   }, []);
+
+  if (needLogin) return <Login onDone={load} />;
 
   if (error) {
     return (
@@ -125,23 +134,62 @@ function Shell() {
 }
 
 function UserMenu({ me }: { me: string }) {
-  // Etappe 1: lokale Nutzerauswahl zum Testen
   return (
-    <select
-      value={me}
-      style={{ width: "auto" }}
-      title="Angemeldet als"
-      onChange={(e) => {
-        localStorage.setItem("devUser", e.target.value);
-        location.reload();
-      }}
-    >
-      {USERS.map((u) => (
-        <option key={u.id} value={u.id}>
-          👤 {u.name}
-        </option>
-      ))}
-    </select>
+    <div className="row small">
+      <span className="muted">👤 {userName(me)}</span>
+      <button
+        className="btn small"
+        onClick={async () => {
+          if (!confirm("Abmelden?")) return;
+          await api("/logout", { method: "POST" });
+          location.reload();
+        }}
+      >
+        Abmelden
+      </button>
+    </div>
+  );
+}
+
+function Login({ onDone }: { onDone: () => void }) {
+  const [user, setUser] = useState("felix");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="login">
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          setErr(null);
+          try {
+            await api("/login", { body: { user, password } });
+            onDone();
+          } catch (e) {
+            setErr((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <div className="brand" style={{ fontSize: 20 }}>
+          <div className="logo">i</div> Ideen-Board
+        </div>
+        <div className="row">
+          {USERS.map((u) => (
+            <button type="button" key={u.id} className={"btn grow" + (user === u.id ? " active" : "")} onClick={() => setUser(u.id)}>
+              {u.name}
+            </button>
+          ))}
+        </div>
+        <input type="password" placeholder="Passwort" autoComplete="current-password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} />
+        {err && <div style={{ color: "var(--red)" }}>{err}</div>}
+        <button className="btn primary" type="submit" disabled={busy || !password}>
+          {busy ? "Prüfe…" : "Anmelden"}
+        </button>
+      </form>
+    </div>
   );
 }
 

@@ -15,15 +15,13 @@ export function onUnauthorized(fn: () => void) {
 export async function api<T = unknown>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers["content-type"] = "application/json";
-  const devUser = localStorage.getItem("devUser");
-  if (devUser) headers["x-user"] = devUser;
   const res = await fetch("/api" + path, {
     method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
     headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     credentials: "same-origin",
   });
-  if (res.status === 401) {
+  if (res.status === 401 && path !== "/login") {
     unauthorizedHandler?.();
     throw new ApiError("Nicht angemeldet", 401);
   }

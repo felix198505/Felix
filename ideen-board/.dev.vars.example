@@ -1,0 +1,7 @@
+# Nur für die lokale Entwicklung. Kopieren nach .dev.vars (wird nicht ins Git übernommen).
+# Lokales Passwort für beide Nutzer: test
+SESSION_SECRET=lokal-nur-zum-testen-689b07c02298aa84
+PASSWORD_HASH_FELIX=pbkdf2$100000$h7WAxKeFxaOOrmy01upxqw$KitAJdKix2JTFTaVrtCgCR5vQNi0l-WSaJ7xuW4D2-A
+PASSWORD_HASH_TIM=pbkdf2$100000$CgK8U4lqIja3K_q_3rjvKQ$UP901PGBVLRz9UY9h3FKHuYVGlTj6PoRK90oeSlDJQA
+# Optional, für die KI-Analyse lokal:
+# ANTHROPIC_API_KEY=sk-ant-...

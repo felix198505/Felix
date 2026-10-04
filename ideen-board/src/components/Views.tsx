@@ -199,9 +199,39 @@ export function SettingsView() {
               Alles exportieren (JSON-Backup)
             </a>
           </div>
-          <p className="small muted">Zusätzlich wird nach der Veröffentlichung jede Nacht automatisch eine Sicherung bei Cloudflare abgelegt (30 Tage).</p>
+          <p className="small muted">Zusätzlich wird jede Nacht automatisch eine Sicherung bei Cloudflare (R2) abgelegt und 30 Tage aufbewahrt.</p>
+          <Backups />
         </div>
       </div>
+    </div>
+  );
+}
+
+function Backups() {
+  const { run } = useStore();
+  const [list, setList] = useState<{ key: string; size: number; uploaded: string }[] | null>(null);
+  const load = () => api<{ key: string; size: number; uploaded: string }[]>("/backups").then(setList).catch(() => setList([]));
+  if (list === null)
+    return (
+      <button className="btn small" onClick={load}>
+        Automatische Sicherungen anzeigen
+      </button>
+    );
+  return (
+    <div>
+      <div className="row" style={{ marginBottom: 6 }}>
+        <b className="small">Automatische Sicherungen</b>
+        <span className="spacer" />
+        <button className="btn small" onClick={() => run(() => api("/backups", { method: "POST" }), "Sicherung erstellt").then(load)}>
+          Jetzt sichern
+        </button>
+      </div>
+      {list.length === 0 && <div className="small muted">Noch keine Sicherung vorhanden.</div>}
+      {list.map((b) => (
+        <div key={b.key} className="small">
+          <a href={`/api/backups/${b.key}`}>{b.key}</a> <span className="muted">({Math.round(b.size / 1024)} KB)</span>
+        </div>
+      ))}
     </div>
   );
 }

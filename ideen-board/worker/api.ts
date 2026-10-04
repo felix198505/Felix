@@ -5,6 +5,7 @@ import type { AiItemState, Card, ColumnKey } from "../shared/types";
 import { addHistory, getRev, loadBoard, loadCard, loadCardDetail, loadCards, nowIso, parseAnalysis, setSetting } from "./db";
 import type { AppEnv } from "./env";
 import { applyAiItem, kickAnalysis, kickBrainstorm } from "./ai";
+import { buildExport, nightlyBackup } from "./backup";
 
 export const api = new Hono<AppEnv>();
 
@@ -459,18 +460,29 @@ api.post("/brainstorms/:id/extra/:ideaId", async (c) => {
 // ---------- Export ----------
 
 api.get("/export.json", async (c) => {
-  const db = c.env.DB;
-  const tables = ["users", "categories", "brainstorms", "cards", "favorites", "checklist_items", "comments", "votes", "history", "ai_analyses", "settings"];
-  const out: Record<string, unknown> = { exportiert_am: nowIso(), version: 1 };
-  for (const t of tables) out[t] = (await db.prepare(`SELECT * FROM ${t}`).all()).results;
   const date = new Date().toISOString().slice(0, 10);
-  return new Response(JSON.stringify(out, null, 2), {
+  return new Response(await buildExport(c.env.DB), {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "content-disposition": `attachment; filename="ideen-board-backup-${date}.json"`,
     },
   });
 });
+
+api.get("/backups", async (c) => {
+  const list = await c.env.BACKUPS.list({ prefix: "backup-" });
+  return c.json(list.objects.map((o) => ({ key: o.key, size: o.size, uploaded: o.uploaded.toISOString() })).sort((a, b) => b.key.localeCompare(a.key)));
+});
+
+api.get("/backups/:key", async (c) => {
+  const obj = await c.env.BACKUPS.get(c.req.param("key"));
+  if (!obj) return bad(c, "Sicherung nicht gefunden", 404);
+  return new Response(obj.body, {
+    headers: { "content-type": "application/json", "content-disposition": `attachment; filename="${c.req.param("key")}"` },
+  });
+});
+
+api.post("/backups", async (c) => c.json({ key: await nightlyBackup(c.env) }));
 
 api.get("/export.csv", async (c) => {
   const db = c.env.DB;

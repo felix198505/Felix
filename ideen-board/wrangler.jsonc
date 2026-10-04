@@ -16,5 +16,10 @@
       "migrations_dir": "migrations"
     }
   ],
+  "r2_buckets": [{ "binding": "BACKUPS", "bucket_name": "ideen-board-backups" }],
+  "triggers": {
+    // alle 10 Minuten: ausstehende KI-Analysen nachholen · täglich 02:17 UTC: Backup
+    "crons": ["*/10 * * * *", "17 2 * * *"]
+  },
   "observability": { "enabled": true }
 }
