@@ -11,6 +11,7 @@ import type {
   Vote,
 } from "../shared/types";
 import type { Env } from "./env";
+import { listAttachments } from "./attachments";
 
 export function nowIso(): string {
   return new Date().toISOString();
@@ -26,6 +27,11 @@ export async function setSetting(db: D1Database, key: string, value: string): Pr
     .prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
     .bind(key, value)
     .run();
+}
+
+/** Öffentliche Adresse der App: aus APP_URL oder der zuletzt genutzten https-Adresse */
+export async function appUrl(env: Env): Promise<string> {
+  return (env.APP_URL || (await getSetting(env.DB, "app_url")) || "").replace(/\/$/, "");
 }
 
 export async function getRev(db: D1Database): Promise<number> {
@@ -86,7 +92,8 @@ export async function loadCards(db: D1Database, where = "c.merged_into IS NULL",
     db
       .prepare(
         `SELECT c.*,
-           (SELECT json_extract(a.data, '$.kurzfassung') FROM ai_analyses a WHERE a.card_id = c.id ORDER BY a.version DESC LIMIT 1) AS ai_summary
+           (SELECT json_extract(a.data, '$.kurzfassung') FROM ai_analyses a WHERE a.card_id = c.id ORDER BY a.version DESC LIMIT 1) AS ai_summary,
+           (SELECT COUNT(*) FROM attachments f WHERE f.card_id = c.id) AS attachment_count
          FROM cards c WHERE ${where} ORDER BY c.column_key, c.position`,
       )
       .bind(...binds),
@@ -136,7 +143,11 @@ export async function loadBoard(env: Env, me: string): Promise<BoardData> {
     cards,
     categories: cats.results,
     brainstorms: bs.results.map(parseBrainstorm),
+    users: (await db.prepare("SELECT id, name, email FROM users").all<{ id: string; name: string; email: string | null }>()).results,
     settings: {
+      mail_enabled: Boolean(env.RESEND_API_KEY && env.MAIL_FROM),
+      pipedrive_enabled: Boolean(env.PIPEDRIVE_API_TOKEN),
+      month_cost_eur: Number(s["ai_cost:" + nowIso().slice(0, 7)] ?? 0) * 0.92,
       examples_seeded: !!s.examples_seeded,
       company_context: s.company_context ?? "",
       ai_monthly_limit_eur: s.ai_monthly_limit_eur ?? "10",
@@ -156,6 +167,7 @@ export async function loadCardDetail(db: D1Database, id: number): Promise<CardDe
   ]);
   return {
     card,
+    attachments: await listAttachments(db, id),
     comments: comments.results as unknown as Comment[],
     history: history.results as unknown as HistoryEntry[],
     analyses: (analyses.results as Record<string, unknown>[]).map(parseAnalysis),

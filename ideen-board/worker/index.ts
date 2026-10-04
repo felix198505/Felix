@@ -1,5 +1,10 @@
 import { Hono } from "hono";
 import { api } from "./api";
+import { attachmentsApi } from "./attachments";
+import { digestApi, weeklyRun } from "./digest";
+import { insightsApi } from "./insights";
+import { pipedriveApi } from "./pipedrive";
+import { pushApi } from "./push";
 import { login, logout, requireAuth } from "./auth";
 import { nightlyBackup } from "./backup";
 import { bumpRev } from "./db";
@@ -21,6 +26,11 @@ app.use("/api/*", async (c, next) => {
 app.post("/api/login", login);
 app.post("/api/logout", logout);
 app.route("/api", api);
+app.route("/api", attachmentsApi);
+app.route("/api", pushApi);
+app.route("/api", insightsApi);
+app.route("/api", digestApi);
+app.route("/api", pipedriveApi);
 
 app.onError((err, c) => {
   console.error(err);
@@ -31,6 +41,7 @@ export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
     if (event.cron === "17 2 * * *") ctx.waitUntil(nightlyBackup(env));
+    else if (event.cron === "47 5 * * 1") ctx.waitUntil(weeklyRun(env));
     else ctx.waitUntil(retryPending(env));
   },
   async queue(batch: MessageBatch<AiJob>, env: Env) {

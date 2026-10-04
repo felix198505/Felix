@@ -6,6 +6,8 @@ import { Avatar, catVar } from "./Avatar";
 import { useStore } from "../store";
 import { fmtDate, fmtDateTime } from "../util";
 import { AiPanel } from "./AiPanel";
+import { MicButton } from "./Mic";
+import { Photos } from "./Photos";
 import { PrioBadge, StarButton } from "./CardTile";
 
 export function CardModal({ id }: { id: number }) {
@@ -113,8 +115,10 @@ export function CardModal({ id }: { id: number }) {
             <div>
               <OwnFields card={card} patch={patch} />
               <Checklist card={card} />
+              <Photos cardId={id} list={detail.attachments} onChange={(attachments) => setDetail({ ...detail, attachments })} />
               <Comments id={id} detail={detail} setDetail={setDetail} />
               <MergeBox card={card} onMerge={mergeWith} />
+              <PipedriveBox card={card} />
               <History detail={detail} />
             </div>
             <div>
@@ -302,6 +306,7 @@ function Comments({ id, detail, setDetail }: { id: number; detail: CardDetail; s
       >
         <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Kommentar schreiben…" rows={2} />
         <div className="row" style={{ justifyContent: "flex-end", marginTop: 6 }}>
+          <MicButton value={text} onChange={setText} title="Kommentar einsprechen" />
           <button className="btn primary" type="submit" disabled={!text.trim()}>
             Kommentieren
           </button>
@@ -337,6 +342,23 @@ function MergeBox({ card, onMerge }: { card: Card; onMerge: (id: number) => Prom
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function PipedriveBox({ card }: { card: Card }) {
+  const { data, run, askText } = useStore();
+  if (!data.settings.pipedrive_enabled || card.merged_into) return null;
+  async function send() {
+    const subject = await askText("Aufgabe in Pipedrive anlegen", { initial: card.next_step || card.title, okLabel: "In Pipedrive anlegen" });
+    if (!subject) return;
+    await run(() => api(`/cards/${card.id}/pipedrive`, { body: { subject, due_date: card.follow_up } }), "Aufgabe in Pipedrive angelegt");
+  }
+  return (
+    <div className="section">
+      <button className="btn small" onClick={send}>
+        ↗ Als Aufgabe in Pipedrive anlegen
+      </button>
     </div>
   );
 }

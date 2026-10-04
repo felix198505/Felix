@@ -11,6 +11,9 @@ import { Board } from "./components/Board";
 import { CardModal } from "./components/CardModal";
 import { MeetingView, PrintView, SettingsView, TodayView } from "./components/Views";
 import { BrainstormList, BrainstormSession } from "./components/Brainstorm";
+import { ImportView } from "./components/Import";
+import { MicButton } from "./components/Mic";
+import { Overview } from "./components/Overview";
 
 function useHash(): [string, (h: string) => void] {
   const [hash, setHash] = useState(window.location.hash || "#/board");
@@ -68,7 +71,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { data, me, openCardId, run, toast } = useStore();
+  const { data, me, openCardId, openCard, run, toast } = useStore();
   const [hash, go] = useHash();
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [quick, setQuick] = useState("");
@@ -76,7 +79,15 @@ function Shell() {
   const decideCount = data.cards.filter((c) => c.column_key === "entscheiden").length;
 
   const route = hash.replace(/^#\/?/, "").split("/");
-  const view = route[0] || "board";
+  const view = route[0] === "karte" ? "board" : route[0] || "board";
+
+  // Direktlink #/karte/12 (aus Mail oder Push) öffnet die Karte auf dem Board
+  useEffect(() => {
+    if (route[0] === "karte" && route[1]) {
+      openCard(Number(route[1]));
+      history.replaceState(null, "", "#/board");
+    }
+  }, [hash]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function addQuick(e: React.FormEvent) {
     e.preventDefault();
@@ -105,6 +116,7 @@ function Shell() {
         </div>
         <form className="quick" onSubmit={addQuick}>
           <input type="text" value={quick} onChange={(e) => setQuick(e.target.value)} placeholder="Neue Idee… (Enter)" enterKeyHint="done" />
+          <MicButton value={quick} onChange={setQuick} title="Idee einsprechen" />
           <button className="btn primary" type="submit" disabled={!quick.trim()}>
             +
           </button>
@@ -114,6 +126,7 @@ function Shell() {
           {navBtn("heute", "Heute fällig", dueCount, true)}
           {navBtn("besprechung", "Besprechung", decideCount)}
           {navBtn("brainstorming", "Brainstorming")}
+          {navBtn("ueberblick", "Überblick")}
           {navBtn("einstellungen", "⚙")}
         </nav>
         <UserMenu me={me} />
@@ -129,6 +142,8 @@ function Shell() {
       {view === "besprechung" && <MeetingView />}
       {view === "brainstorming" && (route[1] ? <BrainstormSession id={Number(route[1])} go={go} /> : <BrainstormList go={go} />)}
       {view === "einstellungen" && <SettingsView />}
+      {(view === "ueberblick" || view === "rueckblick") && <Overview />}
+      {view === "import" && <ImportView />}
       {view === "druck" && <PrintView />}
 
       {openCardId !== null && <CardModal key={openCardId} id={openCardId} />}

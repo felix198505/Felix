@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { columnTitle, userName } from "../shared/types";
 import type { AiAnalysis, AiAnalysisData, BrainstormAi, Card, Source } from "../shared/types";
 import { addHistory, bumpRev, getSetting, loadCard, loadCards, nowIso } from "./db";
+import { loadImagesForAi } from "./attachments";
 import type { AppEnv, Env } from "./env";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
@@ -114,17 +115,27 @@ function costUsd(model: string, usage: Anthropic.Beta.BetaUsage): number {
   return (input * p.in + (usage.output_tokens ?? 0) * p.out) / 1e6 + searches * USD_PER_SEARCH;
 }
 
+/** Bucht KI-Kosten auf den laufenden Monat */
+async function addCost(db: D1Database, usd: number): Promise<void> {
+  await db
+    .prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = CAST(value AS REAL) + CAST(excluded.value AS REAL)")
+    .bind("ai_cost:" + nowIso().slice(0, 7), String(usd))
+    .run();
+}
+
+/** KI-Kosten des laufenden Monats in Euro (grob umgerechnet) */
+export async function monthCostEur(db: D1Database): Promise<number> {
+  return Number((await getSetting(db, "ai_cost:" + nowIso().slice(0, 7))) ?? 0) * EUR_PER_USD;
+}
+
 /** Prüft die Monatsgrenze. Gibt eine Fehlermeldung zurück, wenn sie erreicht ist. */
-async function budgetExceeded(db: D1Database): Promise<string | null> {
+export async function budgetExceeded(db: D1Database): Promise<string | null> {
   const limitEur = Number((await getSetting(db, "ai_monthly_limit_eur")) ?? "10");
-  const monthStart = nowIso().slice(0, 7) + "-01";
-  const spent = await db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_analyses WHERE created_at >= ?").bind(monthStart).first<{ s: number }>();
-  const bs = await getSetting(db, "brainstorm_cost:" + monthStart.slice(0, 7));
-  const eur = ((spent?.s ?? 0) + Number(bs ?? 0)) * EUR_PER_USD;
+  const eur = await monthCostEur(db);
   return eur >= limitEur ? `Monatsgrenze für KI-Kosten erreicht (${limitEur} €). In den Einstellungen anheben oder bis nächsten Monat warten.` : null;
 }
 
-const SYSTEM_RULES = `Du bist ein nüchterner, praxisnaher Berater für einen kleinen deutschen Handwerksbetrieb.
+export const SYSTEM_RULES = `Du bist ein nüchterner, praxisnaher Berater für einen kleinen deutschen Handwerksbetrieb.
 Du analysierst Ideen, die das Team (Felix, Tim und Kerstin) auf seinem Ideen-Board festhält.
 
 Regeln:
@@ -226,9 +237,9 @@ function searchedSources(content: Anthropic.Beta.BetaContentBlock[]): Map<string
  * Führt eine Anfrage aus, bis das Modell das Werkzeug aufgerufen hat.
  * Behandelt pause_turn (lange Websuche) und erinnert einmal, falls das Werkzeug fehlt.
  */
-async function runUntilTool(
+export async function runUntilTool(
   env: Env,
-  params: { system: string; user: string; tools: Anthropic.Beta.BetaToolUnion[]; toolName: string; maxTokens: number },
+  params: { system: string; user: string | Anthropic.Beta.BetaContentBlockParam[]; tools: Anthropic.Beta.BetaToolUnion[]; toolName: string; maxTokens: number },
 ): Promise<{ input: unknown; content: Anthropic.Beta.BetaContentBlock[]; cost: number; model: string }> {
   const api = client(env);
   const model = modelOf(env);
@@ -249,7 +260,9 @@ async function runUntilTool(
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
     });
-    cost += costUsd(res.model in PRICES ? res.model : model, res.usage);
+    const stepCost = costUsd(res.model in PRICES ? res.model : model, res.usage);
+    cost += stepCost;
+    await addCost(env.DB, stepCost);
     allContent.push(...res.content);
     if (res.stop_reason === "refusal") throw new Error("Die KI hat die Anfrage abgelehnt.");
     const call = res.content.find((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use" && b.name === params.toolName);
@@ -323,9 +336,15 @@ ${boardOverview(all, card.id)}
 
 Analysiere die Idee und speichere das Ergebnis mit „analyse_speichern“.`;
 
+    const images = await loadImagesForAi(env, cardId);
     const out = await runUntilTool(env, {
       system: SYSTEM_RULES,
-      user,
+      user: images.length
+        ? [
+            ...images.map((im): Anthropic.Beta.BetaContentBlockParam => ({ type: "image", source: { type: "base64", media_type: im.mime, data: im.base64 } })),
+            { type: "text", text: user + `\n\nOben ${images.length === 1 ? "ist ein Foto" : `sind ${images.length} Fotos`} zur Karte angehängt – beziehe sie in die Analyse ein.` },
+          ]
+        : user,
       tools: [
         { type: "web_search_20260209", name: "web_search", max_uses: 3, user_location: { type: "approximate", country: "DE", timezone: "Europe/Berlin" } },
         ANALYSIS_TOOL(catNames),
@@ -457,11 +476,6 @@ Bündele die Ideen zu sinnvollen Themen (jede Idee genau einem Thema zuordnen, �
       zusatz_ideen: raw.zusatz_ideen.slice(0, 3).map((z, i) => ({ id: `z${Date.now()}-${i}`, ...z, status: "offen" as const })),
     };
     await db.prepare("UPDATE brainstorms SET ai_status = 'done', ai_error = NULL, ai_data = ? WHERE id = ?").bind(JSON.stringify(data), id).run();
-    const key = "brainstorm_cost:" + nowIso().slice(0, 7);
-    await db
-      .prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = CAST(value AS REAL) + CAST(excluded.value AS REAL)")
-      .bind(key, String(out.cost))
-      .run();
   } catch (e) {
     await db.prepare("UPDATE brainstorms SET ai_status = 'error', ai_error = ? WHERE id = ?").bind((e as Error).message.slice(0, 300), id).run();
     throw e;

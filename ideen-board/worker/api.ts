@@ -2,10 +2,11 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { assigneeLabel, ASSIGNEE_GROUPS, COLUMNS, columnTitle, priorityOf, PRIORITY_LABEL, userName, USERS, VOTERS } from "../shared/types";
 import type { AiItemState, Card, ColumnKey } from "../shared/types";
-import { addHistory, getRev, loadBoard, loadCard, loadCardDetail, loadCards, nowIso, parseAnalysis, setSetting } from "./db";
+import { addHistory, getRev, getSetting, loadBoard, loadCard, loadCardDetail, loadCards, nowIso, parseAnalysis, setSetting } from "./db";
 import type { AppEnv } from "./env";
 import { applyAiItem, kickAnalysis, kickBrainstorm } from "./ai";
 import { seedExamples } from "./examples";
+import { notify } from "./push";
 import { buildExport, getBackup, listBackups, nightlyBackup } from "./backup";
 
 export const api = new Hono<AppEnv>();
@@ -25,6 +26,16 @@ const FIELD_LABELS: Record<string, string> = {
   follow_up: "Wiedervorlage",
   reject_reason: "Verwerfungsgrund",
 };
+
+/** Alle anderen Nutzer außer dem aktuellen */
+function others(c: C): string[] {
+  return USER_IDS.filter((u) => u !== c.get("user"));
+}
+
+/** Push im Hintergrund verschicken, ohne die Antwort aufzuhalten */
+function pushLater(c: C, users: string[], msg: { title: string; body: string; url?: string; tag?: string }) {
+  if (users.length) c.executionCtx.waitUntil(notify(c.env, users, msg).catch(() => 0));
+}
 
 function bad(c: C, msg: string, status: 400 | 404 = 400) {
   return c.json({ error: msg }, status);
@@ -62,12 +73,25 @@ async function displayValue(db: D1Database, field: string, v: unknown): Promise<
 
 api.get("/board", async (c) => {
   const since = Number(c.req.query("rev") ?? "-1");
+  // Adresse merken, damit Mails und Push-Nachrichten richtig verlinken
+  const origin = new URL(c.req.url).origin;
+  if (since === -1 && origin.startsWith("https://") && !c.env.APP_URL) {
+    if ((await getSetting(c.env.DB, "app_url")) !== origin) await setSetting(c.env.DB, "app_url", origin);
+  }
   const rev = await getRev(c.env.DB);
   if (since === rev) return c.json({ unchanged: true, rev });
   return c.json(await loadBoard(c.env, c.get("user")));
 });
 
 api.get("/me", (c) => c.json({ user: c.get("user"), name: userName(c.get("user")) }));
+
+api.put("/me/email", async (c) => {
+  const { email } = await c.req.json<{ email: string }>();
+  const e = (email ?? "").trim();
+  if (e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return bad(c, "Ungültige E-Mail-Adresse");
+  await c.env.DB.prepare("UPDATE users SET email = ? WHERE id = ?").bind(e || null, c.get("user")).run();
+  return c.json({ ok: true });
+});
 
 // ---------- Karten ----------
 
@@ -84,8 +108,8 @@ export async function createCard(
   const now = nowIso();
   const res = await db
     .prepare(
-      `INSERT INTO cards (title, description, column_key, position, created_by, created_at, updated_at, brainstorm_id, ai_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO cards (title, description, column_key, position, created_by, created_at, updated_at, brainstorm_id, ai_status, column_since)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       input.title.trim().slice(0, 300),
@@ -97,6 +121,7 @@ export async function createCard(
       now,
       input.brainstorm_id ?? null,
       input.deferred ? "deferred" : "pending",
+      now,
     )
     .run();
   const id = Number(res.meta.last_row_id);
@@ -162,6 +187,10 @@ async function moveCard(c: C, card: Card, column: ColumnKey, position: number | 
   }
   const sets = ["column_key = ?", "position = ?", "updated_at = ?"];
   const binds: unknown[] = [column, pos, nowIso()];
+  if (card.column_key !== column) {
+    sets.push("column_since = ?");
+    binds.push(nowIso());
+  }
   if (rejectReason !== undefined) {
     sets.push("reject_reason = ?");
     binds.push(rejectReason);
@@ -207,6 +236,8 @@ api.post("/cards/:id/comments", async (c) => {
     .bind(id, c.get("user"), text.trim(), nowIso())
     .run();
   await addHistory(db, id, c.get("user"), "kommentiert", short(text, 80));
+  const card = await loadCard(db, id);
+  pushLater(c, others(c), { title: `💬 ${userName(c.get("user"))} zu „${short(card?.title, 40)}“`, body: short(text, 140), url: `/#/karte/${id}`, tag: `card-${id}` });
   return c.json(await loadCardDetail(db, id));
 });
 
@@ -293,6 +324,13 @@ api.post("/cards/:id/vote", async (c) => {
     await addHistory(db, card.id, null, "entschieden", `Mehrheit (${counts.get(winner)} von ${VOTERS.length}) für ${({ ja: "Ja", nein: "Nein", parken: "Parken" })[winner]}`);
     result = target;
   } else if (votes.length >= VOTERS.length) result = "uneinig";
+  const me2 = userName(me);
+  if (winner) {
+    pushLater(c, others(c), { title: `🗳 Entschieden: „${short(card.title, 40)}“`, body: `Mehrheit für ${({ ja: "Ja → Umsetzen", nein: "Nein → Verworfen", parken: "Parken → Parkplatz" })[winner]}`, url: `/#/karte/${card.id}`, tag: `vote-${card.id}` });
+  } else {
+    const missing = VOTERS.filter((u) => u !== me && !votes.some((v) => v.user_id === u));
+    pushLater(c, missing, { title: `🗳 ${me2} hat abgestimmt`, body: `„${short(card.title, 50)}“ wartet auf deine Stimme`, url: "/#/besprechung", tag: `vote-${card.id}` });
+  }
   return c.json({ card: await loadCard(db, card.id), result });
 });
 

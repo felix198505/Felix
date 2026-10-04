@@ -24,8 +24,8 @@
     "consumers": [{ "queue": "ideen-board-ai", "max_batch_size": 1, "max_retries": 2 }]
   },
   "triggers": {
-    // alle 10 Minuten: ausstehende KI-Analysen nachholen · täglich 02:17 UTC: Backup
-    "crons": ["*/10 * * * *", "17 2 * * *"]
+    // alle 10 Min.: KI nachholen · täglich 02:17 UTC: Backup · montags 05:47 UTC: Wochenrückblick + Mail
+    "crons": ["*/10 * * * *", "17 2 * * *", "47 5 * * 1"]
   },
   "observability": { "enabled": true }
 }

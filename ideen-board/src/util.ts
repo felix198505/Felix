@@ -16,6 +16,11 @@ export function fmtDateTime(iso: string): string {
   return new Date(iso).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+/** Ganze Tage seit einem Zeitpunkt */
+export function daysSince(iso: string | null | undefined): number {
+  return iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : 0;
+}
+
 export const ACTIVE_COLUMNS = new Set(["eingang", "ausarbeiten", "entscheiden", "umsetzen", "parkplatz"]);
 
 export function isDue(c: Card): boolean {

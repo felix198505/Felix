@@ -1,9 +1,9 @@
-import { assigneeLabel, priorityOf, PRIORITY_LABEL, userName, USERS, VOTERS } from "../../shared/types";
+import { assigneeLabel, priorityOf, PRIORITY_LABEL, STUCK_DAYS, userName, USERS, VOTERS } from "../../shared/types";
 import { Avatar, catVar } from "./Avatar";
 import type { Card } from "../../shared/types";
 import { api } from "../api";
 import { useStore } from "../store";
-import { fmtDate, isDue, todayStr } from "../util";
+import { daysSince, fmtDate, isDue, todayStr } from "../util";
 
 export function PrioBadge({ card }: { card: Pick<Card, "benefit" | "effort"> }) {
   const p = priorityOf(card.benefit, card.effort);
@@ -30,6 +30,18 @@ export function AiFlag({ card }: { card: Card }) {
     case "deferred":
       return <span className="ai-flag" title="Wird nach dem Brainstorming analysiert">✦ später</span>;
   }
+}
+
+/** Markiert Karten, die zu lange auf eine Entscheidung warten */
+export function StuckBadge({ card }: { card: Card }) {
+  if (card.column_key !== "entscheiden") return null;
+  const d = daysSince(card.column_since);
+  if (d < STUCK_DAYS) return null;
+  return (
+    <span className="stuck" title={`Wartet seit ${d} Tagen auf Entscheidung`}>
+      ⏳ {d} Tage
+    </span>
+  );
 }
 
 export function StarButton({ card }: { card: Card }) {
@@ -75,6 +87,7 @@ export function CardTile({ card, ghost, overlay }: { card: Card; ghost?: boolean
           </span>
         )}
         <PrioBadge card={card} />
+        <StuckBadge card={card} />
         {card.follow_up && (
           <span className={"due" + (due ? " over" : "")} title="Wiedervorlage">
             ⏰ {card.follow_up === todayStr() ? "heute" : fmtDate(card.follow_up)}
@@ -100,6 +113,7 @@ export function CardTile({ card, ghost, overlay }: { card: Card; ghost?: boolean
             </span>
           )}
           {card.comment_count > 0 && <span title="Kommentare">💬 {card.comment_count}</span>}
+          {card.attachment_count > 0 && <span title="Fotos">📷 {card.attachment_count}</span>}
           {card.column_key === "entscheiden" && card.votes.length > 0 && (
             <span title={card.votes.map((v) => `${userName(v.user_id)}: ${v.vote}`).join(", ")}>🗳 {card.votes.length}/{VOTERS.length}</span>
           )}

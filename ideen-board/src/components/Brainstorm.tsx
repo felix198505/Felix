@@ -6,6 +6,7 @@ import { Avatar, catVar } from "./Avatar";
 import { useStore } from "../store";
 import { fmtDate } from "../util";
 import { AiFlag, PrioBadge } from "./CardTile";
+import { MicButton } from "./Mic";
 
 export function BrainstormList({ go }: { go: (hash: string) => void }) {
   const { data, run } = useStore();
@@ -13,7 +14,12 @@ export function BrainstormList({ go }: { go: (hash: string) => void }) {
   return (
     <div className="page">
       <div className="page-inner">
-        <h1>Brainstorming</h1>
+        <div className="row wrap">
+          <h1 className="grow">Brainstorming</h1>
+          <button className="btn" onClick={() => go("#/import")}>
+            🎙 Ideen aus Gespräch / Plaud
+          </button>
+        </div>
         <p className="muted">
           Zu einem Thema viele Ideen hintereinander eintippen. Danach gemeinsam sortieren und Ähnliches zusammenführen. Die KI analysiert erst nach dem Sammeln.
         </p>
@@ -87,7 +93,10 @@ function Collect({ b, ideas }: { b: Brainstorm; ideas: Card[] }) {
           await run(() => api(`/brainstorms/${b.id}/ideas`, { body: { title: t } }));
         }}
       >
-        <input className="brain-input" type="text" autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Nächste Idee…" enterKeyHint="send" />
+        <div className="row">
+          <input className="brain-input" type="text" autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Nächste Idee…" enterKeyHint="send" />
+          <MicButton value={text} onChange={setText} title="Idee einsprechen" />
+        </div>
       </form>
       <div className="row" style={{ margin: "12px 0" }}>
         <span className="muted">{ideas.length} Ideen gesammelt</span>

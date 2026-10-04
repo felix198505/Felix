@@ -57,10 +57,10 @@ export async function seedExamples(c: Context<AppEnv>): Promise<number> {
     const followUp = ex.followUpDays !== undefined ? new Date(Date.now() + ex.followUpDays * 86400000).toISOString().slice(0, 10) : null;
     const r = await db
       .prepare(
-        `INSERT INTO cards (title, description, column_key, position, created_by, created_at, updated_at, category_id, benefit, effort, follow_up, ai_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+        `INSERT INTO cards (title, description, column_key, position, created_by, created_at, updated_at, category_id, benefit, effort, follow_up, ai_status, column_since)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
       )
-      .bind(ex.title, ex.description, ex.column, pos++, ex.by, now, now, cat?.id ?? null, ex.benefit ?? null, ex.effort ?? null, followUp)
+      .bind(ex.title, ex.description, ex.column, pos++, ex.by, now, now, cat?.id ?? null, ex.benefit ?? null, ex.effort ?? null, followUp, now)
       .run();
     const id = Number(r.meta.last_row_id);
     await addHistory(db, id, ex.by, "erstellt", "Beispielkarte");

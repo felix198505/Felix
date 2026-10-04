@@ -96,12 +96,14 @@ export interface Card {
   next_step: string;
   follow_up: string | null;
   reject_reason: string;
+  column_since: string | null;
   merged_into: number | null;
   brainstorm_id: number | null;
   ai_status: AiStatus;
   ai_error: string | null;
   // vom Server ergänzt
   ai_summary: string | null;
+  attachment_count: number;
   favorite_by: string[];
   checklist: ChecklistItem[];
   comment_count: number;
@@ -139,7 +141,8 @@ export interface BoardData {
   cards: Card[];
   categories: Category[];
   brainstorms: Brainstorm[];
-  settings: { examples_seeded: boolean; company_context: string; ai_monthly_limit_eur: string; ai_enabled: boolean; ai_model: string };
+  users: { id: string; name: string; email: string | null }[];
+  settings: { mail_enabled: boolean; pipedrive_enabled: boolean; month_cost_eur: number; examples_seeded: boolean; company_context: string; ai_monthly_limit_eur: string; ai_enabled: boolean; ai_model: string };
 }
 
 // ---- KI-Analyse ----
@@ -183,8 +186,19 @@ export interface AiAnalysis {
   cost_usd: number;
 }
 
+export interface Attachment {
+  id: number;
+  card_id: number;
+  user_id: string;
+  created_at: string;
+  mime: string;
+  size: number;
+  name: string;
+}
+
 export interface CardDetail {
   card: Card;
+  attachments: Attachment[];
   comments: Comment[];
   history: HistoryEntry[];
   analyses: AiAnalysis[];
@@ -212,3 +226,41 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
 };
 
 export const PRIORITY_ORDER: Priority[] = ["quickwin", "hoch", "mittel", "niedrig", "offen"];
+
+// ---- Wochenrückblick, Transkript-Import, Kennzahlen ----
+
+export interface ReviewData {
+  zusammenfassung: string;
+  fokus: string;
+  quick_wins: { karte_id: number; grund: string }[];
+  haengt_fest: { karte_id: number; grund: string; vorschlag: string }[];
+  doppelungen: { karten_ids: number[]; grund: string }[];
+  kombinationen: { karten_ids: number[]; idee: string }[];
+}
+
+export interface Review {
+  id: number;
+  created_at: string;
+  requested_by: string | null;
+  data: ReviewData;
+}
+
+export interface TranscriptIdea {
+  titel: string;
+  beschreibung: string;
+  zitat: string;
+  aehnlich_karte_id: number;
+}
+
+export interface Stats {
+  months: { month: string; created: number; decided: number; done: number }[];
+  columns: { key: string; title: string; count: number }[];
+  people: { id: string; created: number; assigned_open: number; comments: number }[];
+  quick_wins_open: number;
+  stuck: number;
+  avg_days_to_decision: number | null;
+  total: number;
+}
+
+/** Tage, ab denen eine Karte in „Entscheiden“ als hängend markiert wird */
+export const STUCK_DAYS = 7;

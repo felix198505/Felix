@@ -13,6 +13,8 @@ Ideen- und Brainstorming-Board für Felix, Tim und Kerstin. Es ist ein Kanban-Bo
 | Cloudflare Workers, D1, R2, Queues, Cron | 0 € (Gratis-Kontingent reicht bei zwei Nutzern) |
 | KI pro Analyse (Claude Opus 5.5, mit Websuche) | ca. 0,07–0,20 € |
 | KI pro Analyse (Claude Sonnet 5.5) | ca. 0,04–0,10 € |
+| KI-Wochenrückblick / Transkript-Import | ca. 0,05–0,20 € je Lauf |
+| Wochen-Mail über Resend | 0 € (bis 3.000 Mails pro Monat) |
 
 Die Monatsgrenze für KI-Kosten (Standard 10 €) stellt ihr in der App unter ⚙ Einstellungen ein. Wird sie erreicht, werden Ideen trotzdem gespeichert. Die Analyse wartet dann bis zum nächsten Monat oder bis ihr die Grenze anhebt.
 
@@ -145,6 +147,17 @@ Es gibt drei Sicherungsebenen:
 - **Verlauf:** Jede Änderung wird pro Karte mit Name und Zeit festgehalten.
 - **Zusammenführen:** Kommentare und Checklisten werden übernommen. Die zweite Karte wird archiviert, nicht gelöscht.
 - **Live-Abgleich:** Änderungen des anderen erscheinen nach spätestens 5 Sekunden ohne Neuladen.
+- **Spracheingabe (🎙):** in der Schnellerfassung, im Brainstorming und bei Kommentaren. Nutzt die Spracherkennung von Chrome bzw. Safari; Mikrofon-Zugriff einmal erlauben.
+- **Fotos:** in jeder Karte über „📷 Foto“ aufnehmen oder hochladen. Fotos werden automatisch verkleinert. Die KI bezieht die neuesten 3 Fotos bei der Analyse mit ein.
+- **Hängt fest:** Karten, die 7 Tage oder länger in „Entscheiden“ liegen, bekommen ein gelbes ⏳ und stehen in der Besprechung oben.
+- **Ideen aus Gespräch (Plaud):** Brainstorming → „Ideen aus Gespräch / Plaud“. Transkript einfügen oder als Textdatei laden, die KI findet die Ideen, ihr wählt aus. Plaud hat keine offene Schnittstelle; der Weg ist darum: in der Plaud-App Transkript teilen bzw. kopieren und hier einfügen.
+- **Überblick:**
+  - KI-Wochenrückblick (Fokus der Woche, liegengebliebene Quick Wins, festhängende Karten, Doppelungen mit Zusammenführen-Knopf, Ideen, die zusammen mehr bringen)
+  - Zahlen-Dashboard (Entwicklung über 6 Monate, Karten je Spalte, Team)
+- **Wochenüberblick montags** (05:47 UTC, also ca. 7:47 Uhr): Der Rückblick wird automatisch erstellt und per Push sowie, wenn eingerichtet, per E-Mail an alle verschickt.
+- **Push-Benachrichtigungen:** ⚙ Einstellungen → „Benachrichtigungen auf diesem Gerät“. Sie kommen bei neuen Kommentaren, wenn deine Stimme fehlt, bei Entscheidungen und montags. Am iPhone erst die App zum Home-Bildschirm hinzufügen und von dort öffnen.
+- **Pipedrive:** In jeder Karte „Als Aufgabe in Pipedrive anlegen“, wenn eingerichtet (siehe unten).
+- **Kosten-Anzeige:** ⚙ Einstellungen zeigt die KI-Kosten des Monats im Verhältnis zur Monatsgrenze.
 
 ### KI-Analyse
 
@@ -154,6 +167,40 @@ Es gibt drei Sicherungsebenen:
 - Schätzungen sind gelb als **Schätzung** markiert. Quellen werden nur angezeigt, wenn die Websuche sie tatsächlich gefunden hat; erfundene Links werden automatisch entfernt.
 - **Neu analysieren** z. B. nach neuen Kommentaren. Frühere Fassungen bleiben unter „Fassung“ abrufbar.
 - Der **Firmenkontext** aus den Einstellungen wird bei jeder Analyse mitgegeben.
+
+---
+
+## Optionale Verbindungen einrichten
+
+Alles hier ist freiwillig. Die App läuft auch ohne. Einträge kommen wie die Passwörter unter **Workers & Pages → felix → Einstellungen → Variablen und Geheimnisse**.
+
+### Wochen-Mail (Resend)
+
+1. Bei https://resend.com kostenlos registrieren (3.000 Mails pro Monat gratis).
+2. **Domains → Add Domain** → `ft-workanddesign.de`. Die angezeigten DNS-Einträge (TXT/MX) beim Domain-Anbieter eintragen und auf „Verify“ warten.
+3. **API Keys → Create API Key**, Berechtigung „Sending access“.
+4. In Cloudflare hinterlegen:
+   - `RESEND_API_KEY` (Geheimnis): der Schlüssel
+   - `MAIL_FROM` (Text): z. B. `Ideen-Board <ideen@ft-workanddesign.de>`
+5. In der App unter ⚙ Einstellungen trägt jede Person ihre E-Mail-Adresse ein. Mit „Test-Mail an mich“ prüfen.
+
+### Pipedrive
+
+1. In Pipedrive: Profilbild oben rechts → **Persönliche Einstellungen → API** → Token kopieren.
+2. In Cloudflare: `PIPEDRIVE_API_TOKEN` (Geheimnis).
+3. Optional `PIPEDRIVE_DOMAIN` (Text): euer Firmenkürzel aus der Pipedrive-Adresse (`<kürzel>.pipedrive.com`).
+
+Angelegt wird eine Aufgabe (Aktivität) mit Beschreibung, Checkliste und Link zur Karte. Fällig ist sie zur Wiedervorlage der Karte, sonst heute.
+
+### Eigene Adresse (z. B. `ideen.ft-workanddesign.de`)
+
+Das geht nur, wenn die Domain ihre DNS bei Cloudflare hat:
+
+1. Cloudflare → **Domain hinzufügen** → `ft-workanddesign.de`. Der kostenlose Tarif reicht.
+2. Cloudflare zeigt zwei Nameserver. Diese beim bisherigen Domain-Anbieter eintragen. Vorher prüfen, dass alle bestehenden Einträge (Website, E-Mail/MX) in Cloudflare übernommen wurden.
+3. Danach: Worker **felix → Einstellungen → Domains & Routen → Hinzufügen → Benutzerdefinierte Domain** → `ideen.ft-workanddesign.de`.
+
+Links in Mails und Push-Nachrichten nutzen automatisch die zuletzt verwendete Adresse. Fest einstellen lässt sie sich mit `APP_URL` (Text).
 
 ---
 
@@ -169,6 +216,11 @@ ideen-board/
     auth.ts             Login, Sitzungen
     backup.ts           Export und nächtliche Sicherung
     examples.ts         Beispielkarten
+    attachments.ts      Fotos
+    push.ts             Push-Benachrichtigungen
+    insights.ts         Wochenrückblick, Transkript-Import, Kennzahlen
+    digest.ts           Wochen-Mail (Resend)
+    pipedrive.ts        Pipedrive-Aufgaben
   src/                  Oberfläche (React)
   migrations/           Datenbank-Schema
   scripts/deploy.mjs    Veröffentlichung

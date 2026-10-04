@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { assigneeLabel, columnTitle, userName, VOTERS } from "../../shared/types";
 import type { Card } from "../../shared/types";
 import { api } from "../api";
 import { Avatar, catVar } from "./Avatar";
+import { currentSubscription, disablePush, enablePush, pushSupported } from "../push";
 import { useStore } from "../store";
 import { fmtDate, isDue, todayStr } from "../util";
-import { AiFlag, CardTile, PrioBadge, StarButton } from "./CardTile";
+import { AiFlag, CardTile, PrioBadge, StarButton, StuckBadge } from "./CardTile";
 
 // ---------- Heute fällig ----------
 
@@ -41,7 +42,10 @@ export function TodayView() {
 
 export function MeetingView() {
   const { data, me, catsById, openCard, run, askText, toast } = useStore();
-  const list = data.cards.filter((c) => c.column_key === "entscheiden").sort((a, b) => a.position - b.position);
+  // Was am längsten wartet, kommt zuerst
+  const list = data.cards
+    .filter((c) => c.column_key === "entscheiden")
+    .sort((a, b) => (a.column_since ?? "").localeCompare(b.column_since ?? "") || a.position - b.position);
 
   async function vote(c: Card, v: "ja" | "nein" | "parken") {
     let reject_reason: string | undefined;
@@ -96,6 +100,7 @@ export function MeetingView() {
               <div className="card-meta">
                 {cat && <span className="chip">{cat.name}</span>}
                 <PrioBadge card={c} />
+                <StuckBadge card={c} />
                 <span>
                   Nutzen {c.benefit ?? "–"} · Aufwand {c.effort ?? "–"}
                 </span>
@@ -175,6 +180,7 @@ export function SettingsView() {
           <div className="small muted" style={{ marginBottom: 8 }}>
             Status: {data.settings.ai_enabled ? `aktiv (Modell ${data.settings.ai_model})` : "kein API-Schlüssel hinterlegt – Analysen werden gesammelt und später nachgeholt"}
           </div>
+          <CostMeter used={data.settings.month_cost_eur} limit={Number(data.settings.ai_monthly_limit_eur) || 0} />
           <label className="field">Monatsgrenze für KI-Kosten (€)</label>
           <div className="row">
             <input type="number" min={0} step={1} value={limit} onChange={(e) => setLimit(e.target.value)} style={{ maxWidth: 140 }} />
@@ -225,19 +231,7 @@ export function SettingsView() {
           </div>
         )}
 
-        <div className="section">
-          <h3>Konto</h3>
-          <button
-            className="btn"
-            onClick={async () => {
-              if (!confirm("Abmelden?")) return;
-              await api("/logout", { method: "POST" });
-              location.reload();
-            }}
-          >
-            Abmelden
-          </button>
-        </div>
+        <AccountSection />
 
         <div className="section">
           <h3>Export & Datensicherung</h3>
@@ -286,6 +280,129 @@ function Backups() {
         </div>
       ))}
     </div>
+  );
+}
+
+function CostMeter({ used, limit }: { used: number; limit: number }) {
+  const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+  return (
+    <div style={{ margin: "4px 0 12px" }}>
+      <div className="row small">
+        <span className="grow">KI-Kosten diesen Monat (ca.)</span>
+        <b>
+          {used.toLocaleString("de-DE", { style: "currency", currency: "EUR" })} von {limit.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
+        </b>
+      </div>
+      <div className="progress" style={{ height: 8 }}>
+        <i style={{ width: `${pct}%`, background: pct >= 90 ? "var(--red)" : pct >= 70 ? "var(--amber)" : undefined }} />
+      </div>
+    </div>
+  );
+}
+
+function AccountSection() {
+  const { data, me, run, toast } = useStore();
+  const mine = data.users.find((u) => u.id === me);
+  const [email, setEmail] = useState(mine?.email ?? "");
+  const [push, setPush] = useState<"aus" | "an" | "nicht">(pushSupported() ? "aus" : "nicht");
+  useEffect(() => {
+    currentSubscription().then((s) => s && setPush("an"));
+  }, []);
+
+  async function togglePush() {
+    try {
+      if (push === "an") {
+        await disablePush();
+        setPush("aus");
+        toast("Benachrichtigungen auf diesem Gerät aus");
+      } else {
+        await enablePush();
+        setPush("an");
+        toast("Benachrichtigungen auf diesem Gerät an");
+      }
+    } catch (e) {
+      toast((e as Error).message, true);
+    }
+  }
+
+  return (
+    <>
+      <div className="section">
+        <h3>Mein Konto</h3>
+        <div className="row" style={{ marginBottom: 10 }}>
+          <Avatar id={me} size="lg" />
+          <b className="grow">{userName(me)}</b>
+          <button
+            className="btn"
+            onClick={async () => {
+              if (!confirm("Abmelden?")) return;
+              await api("/logout", { method: "POST" });
+              location.reload();
+            }}
+          >
+            Abmelden
+          </button>
+        </div>
+        <label className="field">E-Mail für den Wochenüberblick</label>
+        <div className="row">
+          <input type="text" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@ft-workanddesign.de" />
+          <button className="btn" disabled={email === (mine?.email ?? "")} onClick={() => run(() => api("/me/email", { method: "PUT", body: { email } }), "Gespeichert")}>
+            Speichern
+          </button>
+        </div>
+      </div>
+
+      <div className="section">
+        <h3>Benachrichtigungen auf diesem Gerät</h3>
+        {push === "nicht" ? (
+          <p className="small muted">
+            Hier nicht verfügbar. Am iPhone: Seite in Safari öffnen → Teilen → „Zum Home-Bildschirm“, dann die App von dort öffnen und hier einschalten.
+          </p>
+        ) : (
+          <>
+            <p className="small muted">Bei Kommentaren, fehlenden Stimmen, Entscheidungen und montags mit dem Wochenüberblick.</p>
+            <div className="row">
+              <button className={"btn" + (push === "an" ? " active" : "")} onClick={togglePush}>
+                {push === "an" ? "🔔 An – ausschalten" : "🔕 Aus – einschalten"}
+              </button>
+              {push === "an" && (
+                <button className="btn small" onClick={() => run(() => api("/push/test", { method: "POST" }), "Test gesendet")}>
+                  Test senden
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="section">
+        <h3>Wochenüberblick per Mail (montags)</h3>
+        <p className="small muted">
+          {data.settings.mail_enabled
+            ? `Geht an: ${data.users.filter((u) => u.email).map((u) => u.name).join(", ") || "noch niemand – E-Mail oben eintragen"}.`
+            : "E-Mail-Versand ist noch nicht eingerichtet (siehe README: Resend). Der Rückblick erscheint trotzdem unter „Überblick“ und per Push."}
+        </p>
+        <div className="row wrap">
+          <a className="btn small" href="/api/digest/preview" target="_blank" rel="noreferrer">
+            Vorschau ansehen
+          </a>
+          {data.settings.mail_enabled && (
+            <button className="btn small" onClick={() => run(() => api("/digest/test", { method: "POST" }), "Test-Mail verschickt")}>
+              Test-Mail an mich
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="section">
+        <h3>Verbindungen</h3>
+        <p className="small muted">
+          Pipedrive: {data.settings.pipedrive_enabled ? "verbunden – in jeder Karte „Als Aufgabe in Pipedrive anlegen“" : "nicht eingerichtet (siehe README)"}
+          <br />
+          Plaud: Transkripte über <a href="#/import">Ideen aus Gespräch</a> importieren
+        </p>
+      </div>
+    </>
   );
 }
 
