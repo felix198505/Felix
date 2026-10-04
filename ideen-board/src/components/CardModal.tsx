@@ -1,0 +1,356 @@
+import { useCallback, useEffect, useState } from "react";
+import { COLUMNS, columnTitle, USERS, userName } from "../../shared/types";
+import type { Card, CardDetail, ColumnKey } from "../../shared/types";
+import { api } from "../api";
+import { useStore } from "../store";
+import { fmtDate, fmtDateTime } from "../util";
+import { AiPanel } from "./AiPanel";
+import { PrioBadge, StarButton } from "./CardTile";
+
+export function CardModal({ id }: { id: number }) {
+  const { data, cardsById, openCard, run, askText, toast } = useStore();
+  const [detail, setDetail] = useState<CardDetail | null>(null);
+  const boardCard = cardsById.get(id);
+
+  const load = useCallback(async () => {
+    try {
+      setDetail(await api<CardDetail>(`/cards/${id}`));
+    } catch (e) {
+      toast((e as Error).message, true);
+    }
+  }, [id, toast]);
+
+  // Neu laden, wenn sich die Karte auf dem Board geändert hat (auch durch den anderen Nutzer oder die KI)
+  useEffect(() => {
+    load();
+  }, [load, boardCard?.updated_at, boardCard?.ai_status, boardCard?.comment_count, boardCard?.checklist.length, data.rev]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && openCard(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openCard]);
+
+  if (!detail) {
+    return (
+      <div className="modal-back" onClick={() => openCard(null)}>
+        <div className="modal">
+          <div className="modal-body muted">Lade…</div>
+        </div>
+      </div>
+    );
+  }
+
+  const card = boardCard ?? detail.card;
+  const merged = detail.card.merged_into;
+
+  const patch = (body: Partial<Record<keyof Card, unknown>>) => run(() => api(`/cards/${id}`, { method: "PATCH", body }));
+
+  async function move(col: ColumnKey) {
+    let reject_reason: string | undefined;
+    if (col === "verworfen") {
+      const r = await askText("Warum wird die Idee verworfen?", { placeholder: "Kurzer Grund", okLabel: "Verwerfen" });
+      if (r === null) return;
+      reject_reason = r;
+    }
+    await run(() => api(`/cards/${id}/move`, { body: { column_key: col, reject_reason } }), `Nach „${columnTitle(col)}“ verschoben`);
+  }
+
+  async function mergeWith(sourceId: number) {
+    const src = cardsById.get(sourceId);
+    if (!src || !confirm(`„${src.title}“ in diese Karte zusammenführen?\nKommentare und Checkliste werden übernommen, die andere Karte wird archiviert (nicht gelöscht).`)) return;
+    await run(() => api(`/cards/${id}/merge`, { body: { source_ids: [sourceId] } }), "Zusammengeführt");
+    load();
+  }
+
+  return (
+    <div className="modal-back" onClick={() => openCard(null)}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <StarButton card={card} />
+          <input
+            key={card.title}
+            className="title-input grow"
+            type="text"
+            defaultValue={card.title}
+            onBlur={(e) => e.target.value.trim() && e.target.value !== card.title && patch({ title: e.target.value })}
+            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          />
+          <button className="btn" onClick={() => openCard(null)} aria-label="Schließen">
+            ✕
+          </button>
+        </div>
+        <div className="modal-body">
+          {merged && (
+            <div className="list-card" style={{ borderLeftColor: "var(--amber)" }}>
+              Diese Karte wurde in{" "}
+              <a href="#" onClick={(e) => (e.preventDefault(), openCard(merged))}>
+                Karte #{merged}
+              </a>{" "}
+              zusammengeführt und ist archiviert.
+            </div>
+          )}
+          <div className="row wrap small muted" style={{ marginBottom: 12 }}>
+            <span>
+              #{card.id} · von <b>{userName(card.created_by)}</b> am {fmtDate(card.created_at)}
+            </span>
+            <span className="spacer" />
+            <label className="row small">
+              Spalte
+              <select value={card.column_key} onChange={(e) => move(e.target.value as ColumnKey)} style={{ width: "auto" }}>
+                {COLUMNS.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="detail-grid">
+            <div>
+              <OwnFields card={card} patch={patch} />
+              <Checklist card={card} />
+              <Comments id={id} detail={detail} setDetail={setDetail} />
+              <MergeBox card={card} onMerge={mergeWith} />
+              <History detail={detail} />
+            </div>
+            <div>
+              <AiPanel detail={detail} reload={load} onMerge={mergeWith} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OwnFields({ card, patch }: { card: Card; patch: (b: Partial<Record<keyof Card, unknown>>) => void }) {
+  const { data } = useStore();
+  return (
+    <div className="section">
+      <h3>Unsere Angaben</h3>
+      <div className="fields">
+        <div className="full">
+          <label className="field">Beschreibung</label>
+          <textarea
+            key={card.description}
+            defaultValue={card.description}
+            rows={4}
+            placeholder="Was ist die Idee? Warum?"
+            onBlur={(e) => e.target.value !== card.description && patch({ description: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="field">Kategorie</label>
+          <select value={card.category_id ?? ""} onChange={(e) => patch({ category_id: e.target.value || null })}>
+            <option value="">– keine –</option>
+            {data.categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="field">
+            Priorität (automatisch) &nbsp;<PrioBadge card={card} />
+          </label>
+          <div className="small muted">aus Nutzen und Aufwand</div>
+        </div>
+        <div>
+          <label className="field">Nutzen (1 = gering, 5 = sehr hoch)</label>
+          <Score value={card.benefit} onChange={(v) => patch({ benefit: v })} />
+        </div>
+        <div>
+          <label className="field">Aufwand (1 = gering, 5 = sehr hoch)</label>
+          <Score value={card.effort} onChange={(v) => patch({ effort: v })} />
+        </div>
+        <div>
+          <label className="field">Zuständig</label>
+          <select value={card.assignee ?? ""} onChange={(e) => patch({ assignee: e.target.value || null })}>
+            <option value="">– offen –</option>
+            {USERS.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+            <option value="beide">Beide</option>
+          </select>
+        </div>
+        <div>
+          <label className="field">Wiedervorlage</label>
+          <div className="row">
+            <input type="date" value={card.follow_up ?? ""} onChange={(e) => patch({ follow_up: e.target.value || null })} />
+            {card.follow_up && (
+              <button className="btn small" onClick={() => patch({ follow_up: null })} title="Entfernen">
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="full">
+          <label className="field">Nächster Schritt</label>
+          <input
+            key={card.next_step}
+            type="text"
+            defaultValue={card.next_step}
+            placeholder="Was passiert als Nächstes?"
+            onBlur={(e) => e.target.value !== card.next_step && patch({ next_step: e.target.value })}
+            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          />
+        </div>
+        {card.column_key === "verworfen" && (
+          <div className="full">
+            <label className="field">Verwerfungsgrund</label>
+            <input
+              key={card.reject_reason}
+              type="text"
+              defaultValue={card.reject_reason}
+              onBlur={(e) => e.target.value !== card.reject_reason && patch({ reject_reason: e.target.value })}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Score({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
+  return (
+    <div className="score">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} className={value === n ? "on" : ""} onClick={() => onChange(value === n ? null : n)}>
+          {n}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Checklist({ card }: { card: Card }) {
+  const { run } = useStore();
+  const [text, setText] = useState("");
+  const done = card.checklist.filter((i) => i.done).length;
+  return (
+    <div className="section">
+      <h3>
+        Checkliste {card.checklist.length > 0 && `(${done}/${card.checklist.length})`}
+      </h3>
+      {card.checklist.map((i) => (
+        <div key={i.id} className={"check-item" + (i.done ? " done" : "")}>
+          <input type="checkbox" checked={!!i.done} onChange={(e) => run(() => api(`/checklist/${i.id}`, { method: "PATCH", body: { done: e.target.checked } }))} />
+          <span className="txt">
+            {i.text}
+            {i.source === "ai" && <span className="src-ai">aus KI</span>}
+          </span>
+          <button className="btn ghost small" title="Entfernen" onClick={() => run(() => api(`/checklist/${i.id}`, { method: "DELETE" }))}>
+            ✕
+          </button>
+        </div>
+      ))}
+      <form
+        className="row"
+        style={{ marginTop: 6 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!text.trim()) return;
+          run(() => api(`/cards/${card.id}/checklist`, { body: { text } }));
+          setText("");
+        }}
+      >
+        <input type="text" value={text} onChange={(e) => setText(e.target.value)} placeholder="Teilschritt hinzufügen…" />
+        <button className="btn" type="submit">
+          +
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function Comments({ id, detail, setDetail }: { id: number; detail: CardDetail; setDetail: (d: CardDetail) => void }) {
+  const { run } = useStore();
+  const [text, setText] = useState("");
+  return (
+    <div className="section">
+      <h3>Kommentare</h3>
+      {detail.comments.map((c) => (
+        <div key={c.id} className="comment">
+          <div className="who">
+            <b>{userName(c.user_id)}</b> · {fmtDateTime(c.created_at)}
+          </div>
+          <div className="text">{c.text}</div>
+        </div>
+      ))}
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!text.trim()) return;
+          const d = await run(() => api<CardDetail>(`/cards/${id}/comments`, { body: { text } }));
+          if (d) setDetail(d);
+          setText("");
+        }}
+      >
+        <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Kommentar schreiben…" rows={2} />
+        <div className="row" style={{ justifyContent: "flex-end", marginTop: 6 }}>
+          <button className="btn primary" type="submit" disabled={!text.trim()}>
+            Kommentieren
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function MergeBox({ card, onMerge }: { card: Card; onMerge: (id: number) => void }) {
+  const { data } = useStore();
+  const [open, setOpen] = useState(false);
+  if (card.merged_into) return null;
+  const others = data.cards.filter((c) => c.id !== card.id).sort((a, b) => a.title.localeCompare(b.title, "de"));
+  return (
+    <div className="section">
+      {!open ? (
+        <button className="btn small" onClick={() => setOpen(true)}>
+          ⇄ Andere Karte hier hinein zusammenführen…
+        </button>
+      ) : (
+        <div className="row">
+          <select defaultValue="" onChange={(e) => e.target.value && onMerge(Number(e.target.value))}>
+            <option value="">Karte wählen…</option>
+            {others.map((c) => (
+              <option key={c.id} value={c.id}>
+                #{c.id} {c.title} ({columnTitle(c.column_key)})
+              </option>
+            ))}
+          </select>
+          <button className="btn small" onClick={() => setOpen(false)}>
+            ✕
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function History({ detail }: { detail: CardDetail }) {
+  const [open, setOpen] = useState(false);
+  const list = open ? detail.history : detail.history.slice(0, 5);
+  return (
+    <div className="section">
+      <h3>Verlauf</h3>
+      <ul className="history" style={{ paddingLeft: 18, margin: 0 }}>
+        {list.map((h) => (
+          <li key={h.id}>
+            {fmtDateTime(h.created_at)} – <b>{userName(h.user_id)}</b>: {h.action}
+            {h.detail && ` · ${h.detail}`}
+          </li>
+        ))}
+      </ul>
+      {detail.history.length > 5 && (
+        <button className="btn ghost small" onClick={() => setOpen(!open)}>
+          {open ? "Weniger" : `Alle ${detail.history.length} Einträge`}
+        </button>
+      )}
+    </div>
+  );
+}
