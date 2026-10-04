@@ -117,7 +117,7 @@ export interface BoardData {
   cards: Card[];
   categories: Category[];
   brainstorms: Brainstorm[];
-  settings: { company_context: string; ai_monthly_limit_eur: string; ai_enabled: boolean; ai_model: string };
+  settings: { examples_seeded: boolean; company_context: string; ai_monthly_limit_eur: string; ai_enabled: boolean; ai_model: string };
 }
 
 // ---- KI-Analyse ----

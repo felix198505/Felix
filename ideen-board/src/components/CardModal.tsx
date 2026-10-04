@@ -56,11 +56,12 @@ export function CardModal({ id }: { id: number }) {
     await run(() => api(`/cards/${id}/move`, { body: { column_key: col, reject_reason } }), `Nach „${columnTitle(col)}“ verschoben`);
   }
 
-  async function mergeWith(sourceId: number) {
+  async function mergeWith(sourceId: number): Promise<boolean> {
     const src = cardsById.get(sourceId);
-    if (!src || !confirm(`„${src.title}“ in diese Karte zusammenführen?\nKommentare und Checkliste werden übernommen, die andere Karte wird archiviert (nicht gelöscht).`)) return;
-    await run(() => api(`/cards/${id}/merge`, { body: { source_ids: [sourceId] } }), "Zusammengeführt");
+    if (!src || !confirm(`„${src.title}“ in diese Karte zusammenführen?\nKommentare und Checkliste werden übernommen, die andere Karte wird archiviert (nicht gelöscht).`)) return false;
+    const ok = await run(() => api(`/cards/${id}/merge`, { body: { source_ids: [sourceId] } }), "Zusammengeführt");
     load();
+    return ok !== undefined;
   }
 
   return (
@@ -302,7 +303,7 @@ function Comments({ id, detail, setDetail }: { id: number; detail: CardDetail; s
   );
 }
 
-function MergeBox({ card, onMerge }: { card: Card; onMerge: (id: number) => void }) {
+function MergeBox({ card, onMerge }: { card: Card; onMerge: (id: number) => Promise<boolean> }) {
   const { data } = useStore();
   const [open, setOpen] = useState(false);
   if (card.merged_into) return null;

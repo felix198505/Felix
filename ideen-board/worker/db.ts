@@ -137,6 +137,7 @@ export async function loadBoard(env: Env, me: string): Promise<BoardData> {
     categories: cats.results,
     brainstorms: bs.results.map(parseBrainstorm),
     settings: {
+      examples_seeded: !!s.examples_seeded,
       company_context: s.company_context ?? "",
       ai_monthly_limit_eur: s.ai_monthly_limit_eur ?? "10",
       ai_enabled: Boolean(env.ANTHROPIC_API_KEY),

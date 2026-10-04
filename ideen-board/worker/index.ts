@@ -3,7 +3,8 @@ import { api } from "./api";
 import { login, logout, requireAuth } from "./auth";
 import { nightlyBackup } from "./backup";
 import { bumpRev } from "./db";
-import { retryPending } from "./ai";
+import { handleQueue, retryPending } from "./ai";
+import type { AiJob } from "./ai";
 import type { AppEnv, Env } from "./env";
 
 const app = new Hono<AppEnv>();
@@ -32,4 +33,7 @@ export default {
     if (event.cron === "17 2 * * *") ctx.waitUntil(nightlyBackup(env));
     else ctx.waitUntil(retryPending(env));
   },
-} satisfies ExportedHandler<Env>;
+  async queue(batch: MessageBatch<AiJob>, env: Env) {
+    await handleQueue(batch, env);
+  },
+} satisfies ExportedHandler<Env, AiJob>;

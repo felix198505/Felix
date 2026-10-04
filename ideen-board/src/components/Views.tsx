@@ -186,6 +186,16 @@ export function SettingsView() {
           </form>
         </div>
 
+        {!data.settings.examples_seeded && (
+          <div className="section">
+            <h3>Beispielkarten</h3>
+            <p className="small muted">Legt 5 Beispielideen aus eurem Betrieb an. Die KI analysiert sie automatisch.</p>
+            <button className="btn" onClick={() => run(() => api("/examples", { method: "POST" }), "5 Beispielkarten angelegt – KI analysiert…")}>
+              Beispielkarten anlegen
+            </button>
+          </div>
+        )}
+
         <div className="section">
           <h3>Export & Datensicherung</h3>
           <div className="row wrap">

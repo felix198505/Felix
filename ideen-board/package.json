@@ -10,8 +10,9 @@
     "typecheck": "tsc -b",
     "db:migrate:local": "wrangler d1 migrations apply ideen-board --local",
     "db:migrate:remote": "wrangler d1 migrations apply ideen-board --remote",
-    "deploy": "npm run build && wrangler deploy",
-    "hash-password": "node scripts/hash-password.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "hash-password": "node scripts/hash-password.mjs",
+    "cron:test": "curl \"http://localhost:5173/cdn-cgi/handler/scheduled?cron=*/10+*+*+*+*\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.62.5",
     "@cloudflare/workers-types": "^5.20261004.1",
+    "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
