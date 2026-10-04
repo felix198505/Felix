@@ -266,7 +266,7 @@ api.post("/cards/:id/vote", async (c) => {
   const { vote, reject_reason } = await c.req.json<{ vote: "ja" | "nein" | "parken"; reject_reason?: string }>();
   if (!["ja", "nein", "parken"].includes(vote)) return bad(c, "Ungültige Stimme");
   const me = c.get("user");
-  if (!VOTERS.includes(me)) return bad(c, "Abstimmen dürfen nur " + VOTERS.map(userName).join(" und "));
+  if (!VOTERS.includes(me)) return bad(c, "Keine Berechtigung zum Abstimmen");
   await db
     .prepare(
       "INSERT INTO votes (card_id, user_id, vote, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(card_id, user_id) DO UPDATE SET vote = excluded.vote, created_at = excluded.created_at",

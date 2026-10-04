@@ -7,7 +7,7 @@ export const USERS = [
 ] as const;
 
 /** Wer in der Besprechung abstimmt. Eine Karte wandert weiter, wenn alle hier gleich stimmen. */
-export const VOTERS: readonly string[] = ["felix", "tim"];
+export const VOTERS: readonly string[] = USERS.map((u) => u.id);
 
 /** Sammel-Werte für „Zuständig“ */
 export const ASSIGNEE_GROUPS = [
@@ -36,7 +36,7 @@ export function userName(id: string | null | undefined): string {
 export const COLUMNS = [
   { key: "eingang", title: "Eingang", hint: "Rohe Ideen, ungefiltert" },
   { key: "ausarbeiten", title: "Ausarbeiten", hint: "Wird gerade durchdacht" },
-  { key: "entscheiden", title: "Entscheiden", hint: "Wartet auf Ja/Nein von Felix und Tim" },
+  { key: "entscheiden", title: "Entscheiden", hint: "Wartet auf Ja/Nein von allen" },
   { key: "umsetzen", title: "Umsetzen", hint: "Beschlossen, in Arbeit" },
   { key: "erledigt", title: "Erledigt", hint: "" },
   { key: "parkplatz", title: "Parkplatz", hint: "Später wieder ansehen" },
