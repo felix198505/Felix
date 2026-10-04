@@ -10,8 +10,10 @@ export interface Env {
   /** Passwörter als Secret – Klartext (PASSWORD_FELIX) oder Hash (PASSWORD_HASH_FELIX, erzeugt mit npm run hash-password) */
   PASSWORD_FELIX?: string;
   PASSWORD_TIM?: string;
+  PASSWORD_KERSTIN?: string;
   PASSWORD_HASH_FELIX?: string;
   PASSWORD_HASH_TIM?: string;
+  PASSWORD_HASH_KERSTIN?: string;
   /** Anthropic-API-Schlüssel (Secret). Ohne Schlüssel bleibt die KI-Analyse ausstehend. */
   ANTHROPIC_API_KEY?: string;
   /** Nur für Tests: andere API-Adresse */

@@ -125,7 +125,7 @@ async function budgetExceeded(db: D1Database): Promise<string | null> {
 }
 
 const SYSTEM_RULES = `Du bist ein nüchterner, praxisnaher Berater für einen kleinen deutschen Handwerksbetrieb.
-Du analysierst Ideen, die die beiden Inhaber Felix und Tim auf ihrem Ideen-Board festhalten.
+Du analysierst Ideen, die das Team (die Inhaber Felix und Tim sowie Kerstin) auf seinem Ideen-Board festhält.
 
 Regeln:
 - Schreibe auf Deutsch, klar, konkret und kurz. Keine Floskeln, kein Marketing-Sprech.

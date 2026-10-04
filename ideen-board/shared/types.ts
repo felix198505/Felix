@@ -3,7 +3,29 @@
 export const USERS = [
   { id: "felix", name: "Felix" },
   { id: "tim", name: "Tim" },
+  { id: "kerstin", name: "Kerstin" },
 ] as const;
+
+/** Wer in der Besprechung abstimmt. Eine Karte wandert weiter, wenn alle hier gleich stimmen. */
+export const VOTERS: readonly string[] = ["felix", "tim"];
+
+/** Sammel-Werte für „Zuständig“ */
+export const ASSIGNEE_GROUPS = [
+  { id: "beide", name: "Felix & Tim" },
+  { id: "alle", name: "Alle" },
+] as const;
+
+export function assigneeLabel(v: string | null | undefined): string {
+  if (!v) return "";
+  return ASSIGNEE_GROUPS.find((g) => g.id === v)?.name ?? userName(v);
+}
+
+export function assigneeIncludes(assignee: string | null, user: string): boolean {
+  if (!assignee) return false;
+  if (assignee === "alle") return true;
+  if (assignee === "beide") return VOTERS.includes(user);
+  return assignee === user;
+}
 export type UserId = (typeof USERS)[number]["id"];
 
 export function userName(id: string | null | undefined): string {
@@ -14,7 +36,7 @@ export function userName(id: string | null | undefined): string {
 export const COLUMNS = [
   { key: "eingang", title: "Eingang", hint: "Rohe Ideen, ungefiltert" },
   { key: "ausarbeiten", title: "Ausarbeiten", hint: "Wird gerade durchdacht" },
-  { key: "entscheiden", title: "Entscheiden", hint: "Wartet auf Ja/Nein von beiden" },
+  { key: "entscheiden", title: "Entscheiden", hint: "Wartet auf Ja/Nein von Felix und Tim" },
   { key: "umsetzen", title: "Umsetzen", hint: "Beschlossen, in Arbeit" },
   { key: "erledigt", title: "Erledigt", hint: "" },
   { key: "parkplatz", title: "Parkplatz", hint: "Später wieder ansehen" },

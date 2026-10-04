@@ -1,4 +1,4 @@
-import { priorityOf } from "../shared/types";
+import { assigneeIncludes, priorityOf } from "../shared/types";
 import type { Card, Priority } from "../shared/types";
 
 export function todayStr(): string {
@@ -44,7 +44,7 @@ export function matches(c: Card, f: Filters, me: string): boolean {
   }
   if (f.category === "none" && c.category_id) return false;
   if (f.category && f.category !== "none" && String(c.category_id) !== f.category) return false;
-  if (f.person && c.created_by !== f.person && c.assignee !== f.person && c.assignee !== "beide") return false;
+  if (f.person && c.created_by !== f.person && !assigneeIncludes(c.assignee, f.person)) return false;
   if (f.priority && priorityOf(c.benefit, c.effort) !== f.priority) return false;
   if (f.favorites && !c.favorite_by.includes(me)) return false;
   return true;

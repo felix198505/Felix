@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { columnTitle, USERS, userName } from "../../shared/types";
+import { assigneeLabel, columnTitle, userName, VOTERS } from "../../shared/types";
 import type { Card } from "../../shared/types";
 import { api } from "../api";
 import { useStore } from "../store";
@@ -49,9 +49,9 @@ export function MeetingView() {
     const msg: Record<string, string> = {
       offen: "Stimme gespeichert – wartet auf die zweite Stimme",
       uneinig: "Ihr seid uneinig – bitte besprechen",
-      umsetzen: "Beide Ja → „Umsetzen“",
-      verworfen: "Beide Nein → „Verworfen“",
-      parkplatz: "Beide Parken → „Parkplatz“",
+      umsetzen: "Alle Ja → „Umsetzen“",
+      verworfen: "Alle Nein → „Verworfen“",
+      parkplatz: "Alle Parken → „Parkplatz“",
     };
     toast(msg[res.result] ?? "Gespeichert");
   }
@@ -61,7 +61,7 @@ export function MeetingView() {
       <div className="page-inner">
         <h1>Besprechung</h1>
         <p className="muted">
-          Alle Karten aus „Entscheiden“. Jeder stimmt für sich ab. Bei gleicher Stimme beider wandert die Karte automatisch weiter.
+          Alle Karten aus „Entscheiden“. {VOTERS.map(userName).join(" und ")} stimmen jeweils für sich ab. Bei gleicher Stimme wandert die Karte automatisch weiter.
         </p>
         {list.length === 0 && <div className="empty">Keine Karten zur Entscheidung.</div>}
         {list.map((c, i) => {
@@ -92,17 +92,17 @@ export function MeetingView() {
                 <AiFlag card={c} />
               </div>
               <div className="vote-row">
-                {(["ja", "nein", "parken"] as const).map((v) => (
+                {VOTERS.includes(me) && (["ja", "nein", "parken"] as const).map((v) => (
                   <button key={v} className={"btn" + (mine === v ? " active" : "") + (v === "ja" ? " " : "")} onClick={() => vote(c, v)}>
                     {v === "ja" ? "👍 Ja" : v === "nein" ? "👎 Nein" : "🅿 Parken"}
                   </button>
                 ))}
                 <span className="spacer" />
-                {USERS.map((u) => {
-                  const v = c.votes.find((x) => x.user_id === u.id)?.vote;
+                {VOTERS.map((uid) => {
+                  const v = c.votes.find((x) => x.user_id === uid)?.vote;
                   return (
-                    <span key={u.id} className="chip">
-                      {u.name}: {v ? { ja: "Ja", nein: "Nein", parken: "Parken" }[v] : "…"}
+                    <span key={uid} className="chip">
+                      {userName(uid)}: {v ? { ja: "Ja", nein: "Nein", parken: "Parken" }[v] : "…"}
                     </span>
                   );
                 })}
@@ -300,7 +300,7 @@ export function PrintView() {
                     {(c.next_step || c.assignee || c.follow_up) && (
                       <div className="small" style={{ marginTop: 4 }}>
                         {c.next_step && <>Nächster Schritt: {c.next_step} · </>}
-                        {c.assignee && <>Zuständig: {c.assignee === "beide" ? "Beide" : userName(c.assignee)} · </>}
+                        {c.assignee && <>Zuständig: {assigneeLabel(c.assignee)} · </>}
                         {c.follow_up && <>Wiedervorlage: {fmtDate(c.follow_up)}</>}
                       </div>
                     )}

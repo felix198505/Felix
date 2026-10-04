@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { COLUMNS, columnTitle, USERS, userName } from "../../shared/types";
+import { ASSIGNEE_GROUPS, COLUMNS, columnTitle, USERS, userName } from "../../shared/types";
 import type { Card, CardDetail, ColumnKey } from "../../shared/types";
 import { api } from "../api";
 import { useStore } from "../store";
@@ -176,7 +176,11 @@ function OwnFields({ card, patch }: { card: Card; patch: (b: Partial<Record<keyo
                 {u.name}
               </option>
             ))}
-            <option value="beide">Beide</option>
+            {ASSIGNEE_GROUPS.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
           </select>
         </div>
         <div>

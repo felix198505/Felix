@@ -1,6 +1,6 @@
 # Ideen-Board
 
-Ideen- und Brainstorming-Board für Felix und Tim. Es ist ein Kanban-Board mit automatischer KI-Analyse, läuft auf Handy und Desktop und lässt sich als App auf den Startbildschirm legen.
+Ideen- und Brainstorming-Board für Felix, Tim und Kerstin. Es ist ein Kanban-Board mit automatischer KI-Analyse, läuft auf Handy und Desktop und lässt sich als App auf den Startbildschirm legen.
 
 **Technik:** Cloudflare Workers (App + Server), D1 (Datenbank), R2 (Backups), Queues (KI-Warteschlange), React-Oberfläche, Anthropic API (Claude) für die KI-Analyse.
 
@@ -52,6 +52,7 @@ Im Cloudflare-Dashboard: **Workers & Pages** → **felix** → **Einstellungen**
 |---|---|
 | `PASSWORD_FELIX` | Passwort für Felix |
 | `PASSWORD_TIM` | Passwort für Tim |
+| `PASSWORD_KERSTIN` | Passwort für Kerstin |
 | `ANTHROPIC_API_KEY` | der Schlüssel aus Schritt 1 |
 
 Optional:
@@ -108,7 +109,8 @@ Für die KI lokal `ANTHROPIC_API_KEY=…` in `.dev.vars` eintragen. Den Zeitplan
 
 - **Passwort ändern:** Im Cloudflare-Dashboard unter Variablen und Geheimnisse `PASSWORD_FELIX` bzw. `PASSWORD_TIM` bearbeiten. Alle bestehenden Anmeldungen dieses Nutzers werden dadurch ungültig.
 - **Passwort lieber als Hash speichern:** Mit `npm run hash-password -- "NeuesPasswort"` einen Hash erzeugen und als `PASSWORD_HASH_FELIX` hinterlegen. Ein Hash hat Vorrang vor dem Klartext-Secret.
-- **Weiteren Nutzer hinzufügen:** In `shared/types.ts` die Liste `USERS` ergänzen. Dazu eine neue Datei in `migrations/` anlegen, z. B. `0004_nutzer.sql` mit `INSERT INTO users (id, name) VALUES ('anna', 'Anna');`. Danach das Secret `PASSWORD_ANNA` setzen und neu veröffentlichen.
+- **Nutzer:** Felix, Tim und Kerstin. Alle können Ideen anlegen, bearbeiten und kommentieren. In der Besprechung stimmen nur Felix und Tim ab; das steht in `VOTERS` in `shared/types.ts`.
+- **Weiteren Nutzer hinzufügen:** In `shared/types.ts` die Liste `USERS` ergänzen. Dazu eine neue Datei in `migrations/` anlegen, z. B. `0004_nutzer.sql` mit `INSERT INTO users (id, name) VALUES ('anna', 'Anna');`. Danach das Secret `PASSWORD_ANNA` setzen und neu veröffentlichen (Vorbild: `migrations/0004_kerstin.sql`).
 - Eine offene Registrierung gibt es nicht. Ohne Anmeldung liefert der Server keine Daten. Nach 8 Fehlversuchen innerhalb von 15 Minuten wird die Anmeldung gesperrt.
 - Eine Anmeldung bleibt 30 Tage gültig. Abmelden geht oben rechts.
 

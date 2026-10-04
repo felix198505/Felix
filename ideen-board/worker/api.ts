@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { COLUMNS, columnTitle, priorityOf, PRIORITY_LABEL, userName, USERS } from "../shared/types";
+import { assigneeLabel, ASSIGNEE_GROUPS, COLUMNS, columnTitle, priorityOf, PRIORITY_LABEL, userName, USERS, VOTERS } from "../shared/types";
 import type { AiItemState, Card, ColumnKey } from "../shared/types";
 import { addHistory, getRev, loadBoard, loadCard, loadCardDetail, loadCards, nowIso, parseAnalysis, setSetting } from "./db";
 import type { AppEnv } from "./env";
@@ -54,7 +54,7 @@ async function categoryName(db: D1Database, id: number | null): Promise<string> 
 
 async function displayValue(db: D1Database, field: string, v: unknown): Promise<string> {
   if (field === "category_id") return categoryName(db, (v as number) ?? null);
-  if (field === "assignee") return v ? userName(String(v)) : "–";
+  if (field === "assignee") return v ? assigneeLabel(String(v)) : "–";
   return short(v);
 }
 
@@ -129,7 +129,7 @@ api.patch("/cards/:id", async (c) => {
     let v = body[field];
     if (field === "benefit" || field === "effort") v = clampScore(v);
     else if (field === "category_id") v = v ? Number(v) : null;
-    else if (field === "assignee") v = v && USER_IDS.concat("beide").includes(String(v)) ? String(v) : null;
+    else if (field === "assignee") v = v && USER_IDS.concat(ASSIGNEE_GROUPS.map((g) => g.id)).includes(String(v)) ? String(v) : null;
     else if (field === "follow_up") v = typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
     else v = String(v ?? "");
     if (field === "title" && !(v as string).trim()) continue;
@@ -266,6 +266,7 @@ api.post("/cards/:id/vote", async (c) => {
   const { vote, reject_reason } = await c.req.json<{ vote: "ja" | "nein" | "parken"; reject_reason?: string }>();
   if (!["ja", "nein", "parken"].includes(vote)) return bad(c, "Ungültige Stimme");
   const me = c.get("user");
+  if (!VOTERS.includes(me)) return bad(c, "Abstimmen dürfen nur " + VOTERS.map(userName).join(" und "));
   await db
     .prepare(
       "INSERT INTO votes (card_id, user_id, vote, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(card_id, user_id) DO UPDATE SET vote = excluded.vote, created_at = excluded.created_at",
@@ -278,9 +279,9 @@ api.post("/cards/:id/vote", async (c) => {
     await db.prepare("UPDATE cards SET reject_reason = ? WHERE id = ?").bind(reject_reason, card.id).run();
   }
 
-  const votes = (await db.prepare("SELECT user_id, vote FROM votes WHERE card_id = ?").bind(card.id).all<{ user_id: string; vote: string }>()).results;
+  const votes = (await db.prepare("SELECT user_id, vote FROM votes WHERE card_id = ?").bind(card.id).all<{ user_id: string; vote: string }>()).results.filter((v) => VOTERS.includes(v.user_id));
   let result: "offen" | "uneinig" | ColumnKey = "offen";
-  if (votes.length >= USER_IDS.length) {
+  if (votes.length >= VOTERS.length) {
     const all = new Set(votes.map((v) => v.vote));
     if (all.size === 1) {
       const target = ({ ja: "umsetzen", nein: "verworfen", parken: "parkplatz" } as const)[vote];
@@ -511,7 +512,7 @@ api.get("/export.csv", async (c) => {
         PRIORITY_LABEL[priorityOf(k.benefit, k.effort)],
         userName(k.created_by),
         k.created_at.slice(0, 10),
-        k.assignee === "beide" ? "Beide" : k.assignee ? userName(k.assignee) : "",
+        assigneeLabel(k.assignee),
         k.next_step,
         k.follow_up ?? "",
         k.checklist.map((i) => `${i.done ? "[x]" : "[ ]"} ${i.text}`).join(" | "),

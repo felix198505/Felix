@@ -63,8 +63,9 @@ function passwordHashFor(env: Env, user: string): string | undefined {
 /** Signaturschlüssel für Sitzungen. Ohne eigenes SESSION_SECRET wird er aus den Passwort-Secrets abgeleitet. */
 function sessionSecret(env: Env): string | undefined {
   if (env.SESSION_SECRET) return env.SESSION_SECRET;
-  const parts = USERS.map((u) => passwordHashFor(env, u.id) ?? "");
-  return parts.every((p) => p) ? "derived:" + parts.join("|") : undefined;
+  // nur Nutzer mit gesetztem Passwort – ein fehlendes Passwort sperrt nicht alle anderen aus
+  const parts = USERS.map((u) => passwordHashFor(env, u.id)).filter((p): p is string => !!p);
+  return parts.length ? "derived:" + parts.join("|") : undefined;
 }
 
 async function readSession(c: Context<AppEnv>): Promise<string | null> {

@@ -1,4 +1,4 @@
-import { priorityOf, PRIORITY_LABEL, userName } from "../../shared/types";
+import { assigneeLabel, priorityOf, PRIORITY_LABEL, userName } from "../../shared/types";
 import type { Card } from "../../shared/types";
 import { api } from "../api";
 import { useStore } from "../store";
@@ -73,7 +73,7 @@ export function CardTile({ card, ghost, overlay }: { card: Card; ghost?: boolean
           </span>
         )}
         <PrioBadge card={card} />
-        {card.assignee && <span title="Zuständig">👤 {card.assignee === "beide" ? "Beide" : userName(card.assignee)}</span>}
+        {card.assignee && <span title="Zuständig">👤 {assigneeLabel(card.assignee)}</span>}
         {card.follow_up && (
           <span className={"due" + (due ? " over" : "")} title="Wiedervorlage">
             ⏰ {card.follow_up === todayStr() ? "heute" : fmtDate(card.follow_up)}
