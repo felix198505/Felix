@@ -280,16 +280,19 @@ api.post("/cards/:id/vote", async (c) => {
   }
 
   const votes = (await db.prepare("SELECT user_id, vote FROM votes WHERE card_id = ?").bind(card.id).all<{ user_id: string; vote: string }>()).results.filter((v) => VOTERS.includes(v.user_id));
+  // Mehrheit entscheidet: sobald eine Option mehr als die Hälfte aller Stimmberechtigten hat
   let result: "offen" | "uneinig" | ColumnKey = "offen";
-  if (votes.length >= VOTERS.length) {
-    const all = new Set(votes.map((v) => v.vote));
-    if (all.size === 1) {
-      const target = ({ ja: "umsetzen", nein: "verworfen", parken: "parkplatz" } as const)[vote];
-      const fresh = (await loadCard(db, card.id))!;
-      await moveCard(c, fresh, target, null, target === "verworfen" ? fresh.reject_reason || "Gemeinsam abgelehnt" : undefined);
-      result = target;
-    } else result = "uneinig";
-  }
+  const needed = Math.floor(VOTERS.length / 2) + 1;
+  const counts = new Map<string, number>();
+  for (const v of votes) counts.set(v.vote, (counts.get(v.vote) ?? 0) + 1);
+  const winner = [...counts.entries()].find(([, n]) => n >= needed)?.[0] as "ja" | "nein" | "parken" | undefined;
+  if (winner) {
+    const target = ({ ja: "umsetzen", nein: "verworfen", parken: "parkplatz" } as const)[winner];
+    const fresh = (await loadCard(db, card.id))!;
+    await moveCard(c, fresh, target, null, target === "verworfen" ? fresh.reject_reason || "Mehrheitlich abgelehnt" : undefined);
+    await addHistory(db, card.id, null, "entschieden", `Mehrheit (${counts.get(winner)} von ${VOTERS.length}) für ${({ ja: "Ja", nein: "Nein", parken: "Parken" })[winner]}`);
+    result = target;
+  } else if (votes.length >= VOTERS.length) result = "uneinig";
   return c.json({ card: await loadCard(db, card.id), result });
 });
 

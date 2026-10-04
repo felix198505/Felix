@@ -2,6 +2,7 @@ import { useState } from "react";
 import { COLUMNS, userName } from "../../shared/types";
 import type { Brainstorm, Card } from "../../shared/types";
 import { api } from "../api";
+import { Avatar, catVar } from "./Avatar";
 import { useStore } from "../store";
 import { fmtDate } from "../util";
 import { AiFlag, PrioBadge } from "./CardTile";
@@ -220,7 +221,7 @@ function Sort({ b, ideas }: { b: Brainstorm; ideas: Card[] }) {
       {ideas.map((c) => {
         const cat = c.category_id ? catsById.get(c.category_id) : undefined;
         return (
-          <div key={c.id} className="list-card" style={{ borderLeftColor: cat?.color }}>
+          <div key={c.id} className="list-card" style={catVar(cat?.color)}>
             <div className="row">
               <input type="checkbox" checked={sel.includes(c.id)} onChange={() => toggle(c.id)} style={{ width: 20, height: 20, accentColor: "var(--green)" }} />
               <b className="grow" style={{ cursor: "pointer" }} onClick={() => openCard(c.id)}>

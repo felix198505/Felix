@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ASSIGNEE_GROUPS, COLUMNS, columnTitle, USERS, userName } from "../../shared/types";
 import type { Card, CardDetail, ColumnKey } from "../../shared/types";
 import { api } from "../api";
+import { Avatar, catVar } from "./Avatar";
 import { useStore } from "../store";
 import { fmtDate, fmtDateTime } from "../util";
 import { AiPanel } from "./AiPanel";
@@ -83,7 +84,7 @@ export function CardModal({ id }: { id: number }) {
         </div>
         <div className="modal-body">
           {merged && (
-            <div className="list-card" style={{ borderLeftColor: "var(--amber)" }}>
+            <div className="list-card" style={catVar("var(--amber)")}>
               Diese Karte wurde in{" "}
               <a href="#" onClick={(e) => (e.preventDefault(), openCard(merged))}>
                 Karte #{merged}
@@ -281,10 +282,13 @@ function Comments({ id, detail, setDetail }: { id: number; detail: CardDetail; s
       <h3>Kommentare</h3>
       {detail.comments.map((c) => (
         <div key={c.id} className="comment">
-          <div className="who">
-            <b>{userName(c.user_id)}</b> · {fmtDateTime(c.created_at)}
+          <Avatar id={c.user_id} />
+          <div className="bubble">
+            <div className="who">
+              <b>{userName(c.user_id)}</b> · {fmtDateTime(c.created_at)}
+            </div>
+            <div className="text">{c.text}</div>
           </div>
-          <div className="text">{c.text}</div>
         </div>
       ))}
       <form

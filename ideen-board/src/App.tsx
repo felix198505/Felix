@@ -4,6 +4,7 @@ import type { BoardData } from "../shared/types";
 import { api, onUnauthorized } from "./api";
 import type { ApiError } from "./api";
 import { StoreProvider, useStore } from "./store";
+import { Avatar } from "./components/Avatar";
 import { EMPTY_FILTERS, filtersActive, isDue } from "./util";
 import type { Filters } from "./util";
 import { Board } from "./components/Board";
@@ -97,8 +98,10 @@ function Shell() {
     <>
       <header className="topbar no-print">
         <div className="brand">
-          <div className="logo">i</div>
-          <span className="name">Ideen-Board</span>
+          <div className="logo">✦</div>
+          <span className="name">
+            Ideen<span>Board</span>
+          </span>
         </div>
         <form className="quick" onSubmit={addQuick}>
           <input type="text" value={quick} onChange={(e) => setQuick(e.target.value)} placeholder="Neue Idee… (Enter)" enterKeyHint="done" />
@@ -135,8 +138,9 @@ function Shell() {
 
 function UserMenu({ me }: { me: string }) {
   return (
-    <div className="row small">
-      <span className="muted">👤 {userName(me)}</span>
+    <div className="usermenu small">
+      <Avatar id={me} />
+      <span className="uname">{userName(me)}</span>
       <button
         className="btn small"
         onClick={async () => {
@@ -173,12 +177,17 @@ function Login({ onDone }: { onDone: () => void }) {
           }
         }}
       >
-        <div className="brand" style={{ fontSize: 20 }}>
-          <div className="logo">i</div> Ideen-Board
+        <div className="brand">
+          <div className="logo">✦</div>
+          <span className="name">
+            Ideen<span style={{ color: "var(--green)" }}>Board</span>
+          </span>
         </div>
-        <div className="row">
+        <div className="tagline">Ideen festhalten, gemeinsam ausarbeiten, umsetzen.</div>
+        <div className="who">
           {USERS.map((u) => (
-            <button type="button" key={u.id} className={"btn grow" + (user === u.id ? " active" : "")} onClick={() => setUser(u.id)}>
+            <button type="button" key={u.id} className={"btn" + (user === u.id ? " active" : "")} onClick={() => setUser(u.id)}>
+              <Avatar id={u.id} size="lg" />
               {u.name}
             </button>
           ))}

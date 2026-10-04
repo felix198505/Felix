@@ -109,7 +109,7 @@ Für die KI lokal `ANTHROPIC_API_KEY=…` in `.dev.vars` eintragen. Den Zeitplan
 
 - **Passwort ändern:** Im Cloudflare-Dashboard unter Variablen und Geheimnisse `PASSWORD_FELIX` bzw. `PASSWORD_TIM` bearbeiten. Alle bestehenden Anmeldungen dieses Nutzers werden dadurch ungültig.
 - **Passwort lieber als Hash speichern:** Mit `npm run hash-password -- "NeuesPasswort"` einen Hash erzeugen und als `PASSWORD_HASH_FELIX` hinterlegen. Ein Hash hat Vorrang vor dem Klartext-Secret.
-- **Nutzer:** Felix, Tim und Kerstin, alle mit gleichen Rechten. In der Besprechung stimmen alle ab; eine Karte wandert weiter, wenn alle gleich stimmen.
+- **Nutzer:** Felix, Tim und Kerstin, alle mit gleichen Rechten. In der Besprechung stimmen alle ab; die Mehrheit entscheidet (bei drei Personen reichen zwei gleiche Stimmen).
 - **Weiteren Nutzer hinzufügen:** In `shared/types.ts` die Liste `USERS` ergänzen. Dazu eine neue Datei in `migrations/` anlegen, z. B. `0004_nutzer.sql` mit `INSERT INTO users (id, name) VALUES ('anna', 'Anna');`. Danach das Secret `PASSWORD_ANNA` setzen und neu veröffentlichen (Vorbild: `migrations/0004_kerstin.sql`).
 - Eine offene Registrierung gibt es nicht. Ohne Anmeldung liefert der Server keine Daten. Nach 8 Fehlversuchen innerhalb von 15 Minuten wird die Anmeldung gesperrt.
 - Eine Anmeldung bleibt 30 Tage gültig. Abmelden geht oben rechts.
@@ -136,7 +136,7 @@ Es gibt drei Sicherungsebenen:
 - **Spalten:** Eingang, Ausarbeiten, Entscheiden, Umsetzen, Erledigt, Parkplatz, Verworfen (Verwerfen nur mit Grund). Drag & Drop am Handy: Karte kurz gedrückt halten, dann ziehen. Alternativ in der Karte über „Spalte“ verschieben.
 - **Schnellerfassung:** Feld oben, Enter, die Idee landet im Eingang.
 - **Brainstorming:** Thema anlegen, Ideen hintereinander tippen, „Sammeln beenden“. Danach analysiert die KI, bündelt die Ideen zu Themen und schlägt 3 fehlende Ideen vor. Gemeinsam sortieren und Ähnliches zusammenführen.
-- **Besprechung:** alle Karten aus „Entscheiden“. Jeder stimmt Ja/Nein/Parken. Stimmen alle gleich, wandert die Karte automatisch weiter.
+- **Besprechung:** alle Karten aus „Entscheiden“. Jeder stimmt Ja/Nein/Parken. Sobald die Mehrheit gleich stimmt, wandert die Karte automatisch weiter.
 - **Heute fällig:** Karten mit erreichter Wiedervorlage.
 - **Filter:** Suche, Kategorie, Person, Priorität, gemerkte Karten (★).
 - **Priorität** (automatisch aus Nutzen und Aufwand):

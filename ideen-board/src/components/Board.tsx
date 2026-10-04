@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import {
   closestCorners,
   DndContext,
@@ -23,6 +24,16 @@ import type { Filters } from "../util";
 import { CardTile } from "./CardTile";
 
 type Lists = Record<ColumnKey, number[]>;
+
+const COLUMN_ACCENT: Record<ColumnKey, string> = {
+  eingang: "#67e8f9",
+  ausarbeiten: "#a78bfa",
+  entscheiden: "#fbbf24",
+  umsetzen: "#34f58c",
+  erledigt: "#22c55e",
+  parkplatz: "#94a3b8",
+  verworfen: "#ff5a6a",
+};
 
 function buildLists(cards: Card[]): Lists {
   const lists = Object.fromEntries(COLUMNS.map((c) => [c.key, [] as number[]])) as unknown as Lists;
@@ -149,8 +160,9 @@ function Column({ colKey, title, hint, ids, activeId }: { colKey: ColumnKey; tit
   const { cardsById } = useStore();
   const { setNodeRef, isOver } = useDroppable({ id: "col:" + colKey });
   return (
-    <section className={"column" + (isOver ? " over" : "")}>
+    <section className={"column" + (isOver ? " over" : "")} style={{ "--accent": COLUMN_ACCENT[colKey] } as CSSProperties}>
       <div className="column-head">
+        <span className="cdot" />
         <h2>{title}</h2>
         <span className="count">{ids.length}</span>
       </div>
@@ -161,7 +173,7 @@ function Column({ colKey, title, hint, ids, activeId }: { colKey: ColumnKey; tit
             const card = cardsById.get(id);
             return card ? <SortableCard key={id} card={card} ghost={id === activeId} /> : null;
           })}
-          {ids.length === 0 && <div className="muted small" style={{ textAlign: "center", padding: 12 }}>Hierher ziehen</div>}
+          {ids.length === 0 && <div className="column-empty">Hierher ziehen</div>}
         </div>
       </SortableContext>
     </section>

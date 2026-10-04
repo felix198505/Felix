@@ -1,4 +1,5 @@
-import { assigneeLabel, priorityOf, PRIORITY_LABEL, userName } from "../../shared/types";
+import { assigneeLabel, priorityOf, PRIORITY_LABEL, userName, USERS, VOTERS } from "../../shared/types";
+import { Avatar, catVar } from "./Avatar";
 import type { Card } from "../../shared/types";
 import { api } from "../api";
 import { useStore } from "../store";
@@ -19,7 +20,7 @@ export function AiFlag({ card }: { card: Card }) {
         </span>
       );
     case "done":
-      return <span className="ai-flag" title="KI-Analyse vorhanden">✦ KI</span>;
+      return <span className="ai-flag done" title="KI-Analyse vorhanden">✦ KI</span>;
     case "error":
       return (
         <span className="ai-flag err" title={card.ai_error ?? "KI-Analyse fehlgeschlagen – wird nachgeholt"}>
@@ -54,10 +55,11 @@ export function CardTile({ card, ghost, overlay }: { card: Card; ghost?: boolean
   const cat = card.category_id ? catsById.get(card.category_id) : undefined;
   const done = card.checklist.filter((i) => i.done).length;
   const due = isDue(card);
+  const assigneeIds = !card.assignee ? [] : card.assignee === "alle" ? USERS.map((u) => u.id) : card.assignee === "beide" ? [...VOTERS].slice(0, 2) : [card.assignee];
   return (
     <div
-      className={"card" + (ghost ? " ghost" : "") + (overlay ? " overlay" : "")}
-      style={{ borderLeftColor: cat?.color ?? "var(--line)" }}
+      className={"card" + (ghost ? " ghost" : "") + (overlay ? " overlay" : "") + (card.favorite_by.length ? " fav" : "")}
+      style={catVar(cat?.color)}
       onClick={() => openCard(card.id)}
     >
       <div className="card-top">
@@ -68,26 +70,41 @@ export function CardTile({ card, ghost, overlay }: { card: Card; ghost?: boolean
       <div className="card-meta">
         {cat && (
           <span className="chip">
-            <span className="dot" style={{ background: cat.color }} />
+            <span className="dot" style={{ background: cat.color, color: cat.color }} />
             {cat.name}
           </span>
         )}
         <PrioBadge card={card} />
-        {card.assignee && <span title="Zuständig">👤 {assigneeLabel(card.assignee)}</span>}
         {card.follow_up && (
           <span className={"due" + (due ? " over" : "")} title="Wiedervorlage">
             ⏰ {card.follow_up === todayStr() ? "heute" : fmtDate(card.follow_up)}
           </span>
         )}
-        {card.checklist.length > 0 && (
-          <span title="Checkliste">
-            ☑ {done}/{card.checklist.length}
-          </span>
-        )}
-        {card.comment_count > 0 && <span title="Kommentare">💬 {card.comment_count}</span>}
-        {card.column_key === "entscheiden" && card.votes.length > 0 && (
-          <span title="Abstimmung">🗳 {card.votes.map((v) => `${userName(v.user_id)[0]}:${v.vote}`).join(" ")}</span>
-        )}
+      </div>
+      {card.checklist.length > 0 && (
+        <div className="progress" title={`Checkliste ${done}/${card.checklist.length}`}>
+          <i style={{ width: `${(done / card.checklist.length) * 100}%` }} />
+        </div>
+      )}
+      <div className="card-foot">
+        <span className="avatars" title={`von ${userName(card.created_by)}${card.assignee ? " · zuständig: " + assigneeLabel(card.assignee) : ""}`}>
+          <Avatar id={card.created_by} size="sm" />
+          {assigneeIds.filter((a) => a !== card.created_by).map((a) => (
+            <Avatar key={a} id={a} size="sm" />
+          ))}
+        </span>
+        <span className="stats">
+          {card.checklist.length > 0 && (
+            <span title="Checkliste">
+              ☑ {done}/{card.checklist.length}
+            </span>
+          )}
+          {card.comment_count > 0 && <span title="Kommentare">💬 {card.comment_count}</span>}
+          {card.column_key === "entscheiden" && card.votes.length > 0 && (
+            <span title={card.votes.map((v) => `${userName(v.user_id)}: ${v.vote}`).join(", ")}>🗳 {card.votes.length}/{VOTERS.length}</span>
+          )}
+        </span>
+        <span className="spacer" />
         <AiFlag card={card} />
       </div>
       {card.column_key === "verworfen" && card.reject_reason && <div className="card-sum">Grund: {card.reject_reason}</div>}

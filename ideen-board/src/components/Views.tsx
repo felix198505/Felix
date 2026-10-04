@@ -2,6 +2,7 @@ import { useState } from "react";
 import { assigneeLabel, columnTitle, userName, VOTERS } from "../../shared/types";
 import type { Card } from "../../shared/types";
 import { api } from "../api";
+import { Avatar, catVar } from "./Avatar";
 import { useStore } from "../store";
 import { fmtDate, isDue, todayStr } from "../util";
 import { AiFlag, CardTile, PrioBadge, StarButton } from "./CardTile";
@@ -17,7 +18,12 @@ export function TodayView() {
       <div className="page-inner">
         <h1>Heute fällig</h1>
         <p className="muted">Alle Karten, deren Wiedervorlage heute oder früher ist.</p>
-        {due.length === 0 && <div className="empty">Nichts fällig. 🎉</div>}
+        {due.length === 0 && (
+          <div className="empty">
+            <span className="big">🎉</span>
+            Nichts fällig.
+          </div>
+        )}
         {due.map((c) => (
           <div key={c.id} style={{ marginBottom: 8 }}>
             <div className="small" style={{ color: c.follow_up! < today ? "var(--red)" : "var(--amber)", marginBottom: 2 }}>
@@ -47,11 +53,11 @@ export function MeetingView() {
     const res = await run(() => api<{ result: string }>(`/cards/${c.id}/vote`, { body: { vote: v, reject_reason } }));
     if (!res) return;
     const msg: Record<string, string> = {
-      offen: "Stimme gespeichert – wartet auf die zweite Stimme",
-      uneinig: "Ihr seid uneinig – bitte besprechen",
-      umsetzen: "Alle Ja → „Umsetzen“",
-      verworfen: "Alle Nein → „Verworfen“",
-      parkplatz: "Alle Parken → „Parkplatz“",
+      offen: "Stimme gespeichert – noch keine Mehrheit",
+      uneinig: "Keine Mehrheit – bitte besprechen",
+      umsetzen: "Mehrheit Ja → „Umsetzen“ 🚀",
+      verworfen: "Mehrheit Nein → „Verworfen“",
+      parkplatz: "Mehrheit Parken → „Parkplatz“",
     };
     toast(msg[res.result] ?? "Gespeichert");
   }
@@ -61,14 +67,19 @@ export function MeetingView() {
       <div className="page-inner">
         <h1>Besprechung</h1>
         <p className="muted">
-          Alle Karten aus „Entscheiden“. {VOTERS.map(userName).join(" und ")} stimmen jeweils für sich ab. Bei gleicher Stimme wandert die Karte automatisch weiter.
+          Alle Karten aus „Entscheiden“. Jeder stimmt für sich ab – sobald {Math.floor(VOTERS.length / 2) + 1} von {VOTERS.length} gleich stimmen, wandert die Karte automatisch weiter.
         </p>
-        {list.length === 0 && <div className="empty">Keine Karten zur Entscheidung.</div>}
+        {list.length === 0 && (
+          <div className="empty">
+            <span className="big">✓</span>
+            Keine Karten zur Entscheidung.
+          </div>
+        )}
         {list.map((c, i) => {
           const cat = c.category_id ? catsById.get(c.category_id) : undefined;
           const mine = c.votes.find((v) => v.user_id === me)?.vote;
           return (
-            <div key={c.id} className="list-card" style={{ borderLeftColor: cat?.color }}>
+            <div key={c.id} className="list-card" style={catVar(cat?.color)}>
               <div className="row">
                 <span className="muted">{i + 1}.</span>
                 <b className="grow" style={{ cursor: "pointer" }} onClick={() => openCard(c.id)}>
@@ -91,21 +102,14 @@ export function MeetingView() {
                 {c.next_step && <span>Nächster Schritt: {c.next_step}</span>}
                 <AiFlag card={c} />
               </div>
+              <VoteBar card={c} />
               <div className="vote-row">
                 {VOTERS.includes(me) && (["ja", "nein", "parken"] as const).map((v) => (
-                  <button key={v} className={"btn" + (mine === v ? " active" : "") + (v === "ja" ? " " : "")} onClick={() => vote(c, v)}>
+                  <button key={v} className={"btn vote-btn " + v + (mine === v ? " active" : "")} onClick={() => vote(c, v)}>
                     {v === "ja" ? "👍 Ja" : v === "nein" ? "👎 Nein" : "🅿 Parken"}
                   </button>
                 ))}
                 <span className="spacer" />
-                {VOTERS.map((uid) => {
-                  const v = c.votes.find((x) => x.user_id === uid)?.vote;
-                  return (
-                    <span key={uid} className="chip">
-                      {userName(uid)}: {v ? { ja: "Ja", nein: "Nein", parken: "Parken" }[v] : "…"}
-                    </span>
-                  );
-                })}
                 <button className="btn small" onClick={() => openCard(c.id)}>
                   Details
                 </button>
@@ -114,6 +118,31 @@ export function MeetingView() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function VoteBar({ card }: { card: Card }) {
+  const n = VOTERS.length;
+  const needed = Math.floor(n / 2) + 1;
+  const count = (v: string) => card.votes.filter((x) => x.vote === v && VOTERS.includes(x.user_id)).length;
+  return (
+    <div className="votebar">
+      <div className="track" title={`Mehrheit ab ${needed} von ${n} Stimmen`}>
+        {(["ja", "parken", "nein"] as const).map((v) => (
+          <i key={v} className={v} style={{ width: `${(count(v) / n) * 100}%` }} />
+        ))}
+        <span className="mark" style={{ left: `${(needed / n) * 100}%` }} />
+      </div>
+      {VOTERS.map((uid) => {
+        const v = card.votes.find((x) => x.user_id === uid)?.vote;
+        return (
+          <span key={uid} className={"voter " + (v ?? "")}>
+            <Avatar id={uid} size="sm" />
+            {v ? { ja: "Ja", nein: "Nein", parken: "Parken" }[v] : "offen"}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -195,6 +224,20 @@ export function SettingsView() {
             </button>
           </div>
         )}
+
+        <div className="section">
+          <h3>Konto</h3>
+          <button
+            className="btn"
+            onClick={async () => {
+              if (!confirm("Abmelden?")) return;
+              await api("/logout", { method: "POST" });
+              location.reload();
+            }}
+          >
+            Abmelden
+          </button>
+        </div>
 
         <div className="section">
           <h3>Export & Datensicherung</h3>
@@ -290,7 +333,7 @@ export function PrintView() {
                   {columnTitle(k)} ({list.length})
                 </h2>
                 {list.map((c) => (
-                  <div key={c.id} className="print-card list-card" style={{ borderLeftColor: c.category_id ? catsById.get(c.category_id)?.color : undefined }}>
+                  <div key={c.id} className="print-card list-card" style={catVar(c.category_id ? catsById.get(c.category_id)?.color : undefined)}>
                     <b>{c.title}</b>{" "}
                     <span className="muted small">
                       · {c.category_id ? catsById.get(c.category_id)?.name : "ohne Kategorie"} · Nutzen {c.benefit ?? "–"} / Aufwand {c.effort ?? "–"} · <PrioBadge card={c} /> · von {userName(c.created_by)}, {fmtDate(c.created_at)}
