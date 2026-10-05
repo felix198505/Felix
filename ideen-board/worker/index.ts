@@ -5,6 +5,7 @@ import { digestApi, weeklyRun } from "./digest";
 import { insightsApi } from "./insights";
 import { pipedriveApi } from "./pipedrive";
 import { pushApi } from "./push";
+import { restoreApi } from "./restore";
 import { login, logout, requireAuth } from "./auth";
 import { nightlyBackup } from "./backup";
 import { bumpRev } from "./db";
@@ -31,6 +32,7 @@ app.route("/api", pushApi);
 app.route("/api", insightsApi);
 app.route("/api", digestApi);
 app.route("/api", pipedriveApi);
+app.route("/api", restoreApi);
 
 app.onError((err, c) => {
   console.error(err);

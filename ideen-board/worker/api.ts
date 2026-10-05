@@ -619,7 +619,7 @@ api.get("/export.json", async (c) => {
 api.get("/backups", async (c) => c.json(await listBackups(c.env)));
 
 api.get("/backups/:key", async (c) => {
-  if (!/^backup-\d{4}-\d{2}-\d{2}\.json$/.test(c.req.param("key"))) return bad(c, "Ungültiger Name", 404);
+  if (!/^backup-(\d{4}-\d{2}-\d{2}|vor-wiederherstellung-\d+)\.json$/.test(c.req.param("key"))) return bad(c, "Ungültiger Name", 404);
   const body = await getBackup(c.env, c.req.param("key"));
   if (!body) return bad(c, "Sicherung nicht gefunden", 404);
   return new Response(body, {

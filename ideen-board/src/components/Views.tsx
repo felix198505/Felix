@@ -253,8 +253,54 @@ export function SettingsView() {
           </div>
           <p className="small muted">Zusätzlich wird jede Nacht automatisch eine Sicherung bei Cloudflare abgelegt und 30 Tage aufbewahrt.</p>
           <Backups />
+          <RestoreBackup />
         </div>
       </div>
+    </div>
+  );
+}
+
+function RestoreBackup() {
+  const { run, askText, toast } = useStore();
+  const [busy, setBusy] = useState(false);
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(await file.text());
+    } catch {
+      toast("Die Datei ist keine gültige Sicherung (kein JSON)", true);
+      return;
+    }
+    const cards = Array.isArray(data.cards) ? data.cards.length : 0;
+    if (!cards && !Array.isArray(data.categories)) {
+      toast("Die Datei ist keine Ideen-Board-Sicherung", true);
+      return;
+    }
+    const when = String(data.exportiert_am ?? "").slice(0, 10) || "unbekannt";
+    const ok = await askText(
+      `Sicherung vom ${when} mit ${cards} Karten zurückspielen? ALLE aktuellen Daten werden ersetzt (vorher wird automatisch eine Sicherung des jetzigen Stands angelegt). Zum Bestätigen WIEDERHERSTELLEN eintippen.`,
+      { placeholder: "WIEDERHERSTELLEN", okLabel: "Zurückspielen" },
+    );
+    if (ok?.toUpperCase() !== "WIEDERHERSTELLEN") return;
+    setBusy(true);
+    const r = await run(() => api<{ safetyKey: string; counts: Record<string, number> }>("/restore", { body: data }));
+    setBusy(false);
+    if (r) toast(`Zurückgespielt: ${r.counts.cards ?? 0} Karten. Vorheriger Stand gesichert als ${r.safetyKey}`);
+  }
+  return (
+    <div style={{ marginTop: 12 }}>
+      <label className="btn small">
+        {busy ? (
+          <>
+            <span className="spin">✦</span> Spiele zurück…
+          </>
+        ) : (
+          "⟲ Sicherung zurückspielen…"
+        )}
+        <input type="file" accept=".json,application/json" hidden disabled={busy} onChange={(e) => pick(e.target.files?.[0])} />
+      </label>
+      <span className="small muted"> Ersetzt alle Daten durch den Stand der gewählten Sicherungsdatei.</span>
     </div>
   );
 }

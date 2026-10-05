@@ -1,7 +1,7 @@
 import { nowIso } from "./db";
 import type { Env } from "./env";
 
-const TABLES = ["users", "categories", "brainstorms", "cards", "favorites", "checklist_items", "comments", "votes", "history", "ai_analyses", "reviews"];
+const TABLES = ["users", "categories", "brainstorms", "cards", "favorites", "checklist_items", "comments", "votes", "history", "ai_analyses", "ai_feedback", "reviews"];
 const KEEP_DAYS = 30;
 
 /** Kompletter Datenbestand als JSON (für Download und nächtliches Backup) */

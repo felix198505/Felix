@@ -120,11 +120,12 @@ Für die KI lokal `ANTHROPIC_API_KEY=…` in `.dev.vars` eintragen. Den Zeitplan
 
 ## Backup und Wiederherstellung
 
-Es gibt drei Sicherungsebenen:
+Es gibt vier Sicherungsebenen:
 
 1. **Automatisch jede Nacht** (02:17 Uhr UTC): Der komplette Datenbestand wird als JSON in R2 gespeichert und 30 Tage aufbewahrt. Ist R2 im Konto nicht aktiviert, landet die Sicherung in der Datenbank selbst. Liste und Download: ⚙ Einstellungen → „Automatische Sicherungen anzeigen“.
 2. **Von Hand:** ⚙ Einstellungen → **Alles exportieren (JSON)**. Die Datei auf dem PC oder in der Cloud ablegen. **CSV** öffnet sich in Excel, **PDF / Drucken** liefert eine druckfertige Liste.
-3. **Zeitreise der Datenbank (Cloudflare D1):** stellt den Stand zu einem beliebigen Zeitpunkt der letzten 7 Tage wieder her (30 Tage im bezahlten Workers-Tarif).
+3. **Sicherung zurückspielen:** ⚙ Einstellungen → Export & Datensicherung → „⟲ Sicherung zurückspielen…“ → JSON-Datei wählen (Export-Datei oder heruntergeladene automatische Sicherung) → `WIEDERHERSTELLEN` eintippen. Alle Daten werden durch den Stand der Datei ersetzt, inklusive Fotos. Vorher wird automatisch eine Sicherung des aktuellen Stands angelegt (`backup-vor-wiederherstellung-….json`). Damit lässt sich auch das Zurückspielen wieder rückgängig machen.
+4. **Zeitreise der Datenbank (Cloudflare D1):** stellt den Stand zu einem beliebigen Zeitpunkt der letzten 7 Tage wieder her (30 Tage im bezahlten Workers-Tarif).
 
    ```bash
    npx wrangler d1 time-travel info ideen-board --timestamp "2026-10-01T08:00:00Z"
