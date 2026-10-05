@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { buildPushPayload } from "@block65/webcrypto-web-push";
-import { getSetting, nowIso, setSetting } from "./db";
+import { appUrl, getSetting, nowIso, setSetting } from "./db";
 import type { AppEnv, Env } from "./env";
 
 export const pushApi = new Hono<AppEnv>();
@@ -10,6 +10,18 @@ const b64url = (buf: ArrayBuffer) =>
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
+
+/**
+ * Kontaktadresse für die Push-Dienste. Apple lehnt Platzhalter (z. B. example.com, localhost) ab,
+ * daher die echte Adresse der App oder die Absender-Adresse der Wochen-Mail.
+ */
+async function vapidSubject(env: Env): Promise<string> {
+  const url = await appUrl(env);
+  if (url.startsWith("https://") && !/localhost|127\.0\.0\.1/.test(url)) return url;
+  const mail = env.MAIL_FROM?.match(/[^<\s]+@[^>\s]+/)?.[0];
+  if (mail) return "mailto:" + mail;
+  return "https://felix.workers.dev";
+}
 
 /** VAPID-Schlüssel: werden beim ersten Bedarf erzeugt und nur serverseitig in der Datenbank gehalten */
 async function vapid(env: Env) {
@@ -22,7 +34,7 @@ async function vapid(env: Env) {
     await setSetting(env.DB, "vapid_public", pub);
     await setSetting(env.DB, "vapid_private", priv);
   }
-  return { subject: "mailto:ideen-board@example.com", publicKey: pub, privateKey: priv };
+  return { subject: await vapidSubject(env), publicKey: pub, privateKey: priv };
 }
 
 pushApi.get("/push/key", async (c) => c.json({ key: (await vapid(c.env)).publicKey }));
