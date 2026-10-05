@@ -8,6 +8,7 @@ import type { AppEnv, Env } from "./env";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
 const MAX_ATTEMPTS = 5;
+const STALE_MS = 20 * 60 * 1000;
 
 /** Preise in US-Dollar pro 1 Mio. Token (Stand 2026-09) – für die Kostenbremse */
 const PRICES: Record<string, { in: number; out: number }> = {
@@ -69,10 +70,11 @@ export async function handleQueue(batch: MessageBatch<AiJob>, env: Env): Promise
 export async function retryPending(env: Env): Promise<void> {
   if (!env.ANTHROPIC_API_KEY) return;
   const db = env.DB;
-  const stale = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const stale = new Date(Date.now() - STALE_MS).toISOString();
   const recent = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-  // „running“ seit über 10 Min. gilt als abgebrochen
-  await db.prepare("UPDATE cards SET ai_status = 'error', ai_error = 'Abgebrochen' WHERE ai_status = 'running' AND updated_at < ?").bind(stale).run();
+  // Läufe, die länger als 20 Min. „running“ sind, wurden abgebrochen (Warteschlange beendet nach spätestens 15 Min.)
+  await db.prepare("UPDATE cards SET ai_status = 'error', ai_error = 'Abgebrochen' WHERE ai_status = 'running' AND (ai_started_at IS NULL OR ai_started_at < ?)").bind(stale).run();
+  await db.prepare("UPDATE brainstorms SET ai_status = 'error', ai_error = 'Abgebrochen' WHERE ai_status = 'running' AND (ai_started_at IS NULL OR ai_started_at < ?)").bind(stale).run();
   const cards = await db
     .prepare(
       `SELECT id FROM cards WHERE merged_into IS NULL AND deleted_at IS NULL AND ai_status IN ('pending', 'error') AND ai_attempts < ? AND updated_at < ?
@@ -87,7 +89,10 @@ export async function retryPending(env: Env): Promise<void> {
       console.error(e);
     }
   }
-  const bs = await db.prepare("SELECT id FROM brainstorms WHERE ai_status IN ('pending', 'error') LIMIT 2").all<{ id: number }>();
+  const bs = await db
+    .prepare("SELECT id FROM brainstorms WHERE ai_status IN ('pending', 'error') AND ai_attempts < ? AND (ai_started_at IS NULL OR ai_started_at < ?) LIMIT 2")
+    .bind(MAX_ATTEMPTS, recent)
+    .all<{ id: number }>();
   for (const r of bs.results) {
     try {
       await analyzeBrainstorm(env, r.id);
@@ -101,7 +106,7 @@ export async function retryPending(env: Env): Promise<void> {
 // Gemeinsames
 
 function client(env: Env) {
-  return new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, baseURL: env.ANTHROPIC_BASE_URL || undefined, maxRetries: 2, timeout: 5 * 60 * 1000 });
+  return new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, baseURL: env.ANTHROPIC_BASE_URL || undefined, maxRetries: 1, timeout: 3 * 60 * 1000 });
 }
 
 function modelOf(env: Env) {
@@ -303,7 +308,12 @@ export async function analyzeCard(env: Env, cardId: number, requestedBy: string 
     return;
   }
 
-  await db.prepare("UPDATE cards SET ai_status = 'running', ai_attempts = ai_attempts + 1, ai_error = NULL, updated_at = ? WHERE id = ?").bind(nowIso(), cardId).run();
+  // Karte atomar für diesen Lauf beanspruchen – verhindert doppelte, parallel bezahlte Analysen
+  const claim = await db
+    .prepare("UPDATE cards SET ai_status = 'running', ai_attempts = ai_attempts + 1, ai_error = NULL, ai_started_at = ?, updated_at = ? WHERE id = ? AND ai_status IN ('pending', 'error')")
+    .bind(nowIso(), nowIso(), cardId)
+    .run();
+  if (claim.meta.changes !== 1) return;
   await bumpRev(db);
 
   try {
@@ -449,7 +459,11 @@ export async function analyzeBrainstorm(env: Env, id: number): Promise<void> {
     await bumpRev(db);
     return;
   }
-  await db.prepare("UPDATE brainstorms SET ai_status = 'running' WHERE id = ?").bind(id).run();
+  const claim = await db
+    .prepare("UPDATE brainstorms SET ai_status = 'running', ai_attempts = ai_attempts + 1, ai_started_at = ? WHERE id = ? AND ai_status IN ('pending', 'error')")
+    .bind(nowIso(), id)
+    .run();
+  if (claim.meta.changes !== 1) return;
   await bumpRev(db);
   try {
     const ideas = await loadCards(db, "c.brainstorm_id = ? AND c.merged_into IS NULL AND c.deleted_at IS NULL", [id]);
@@ -475,7 +489,7 @@ Bündele die Ideen zu sinnvollen Themen (jede Idee genau einem Thema zuordnen, �
       themen: raw.themen.map((t) => ({ ...t, karten_ids: t.karten_ids.filter((x) => valid.has(x)) })).filter((t) => t.karten_ids.length),
       zusatz_ideen: raw.zusatz_ideen.slice(0, 3).map((z, i) => ({ id: `z${Date.now()}-${i}`, ...z, status: "offen" as const })),
     };
-    await db.prepare("UPDATE brainstorms SET ai_status = 'done', ai_error = NULL, ai_data = ? WHERE id = ?").bind(JSON.stringify(data), id).run();
+    await db.prepare("UPDATE brainstorms SET ai_status = 'done', ai_error = NULL, ai_attempts = 0, ai_data = ? WHERE id = ?").bind(JSON.stringify(data), id).run();
   } catch (e) {
     await db.prepare("UPDATE brainstorms SET ai_status = 'error', ai_error = ? WHERE id = ?").bind((e as Error).message.slice(0, 300), id).run();
     throw e;

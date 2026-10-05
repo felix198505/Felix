@@ -1,13 +1,19 @@
 import { nowIso } from "./db";
 import type { Env } from "./env";
 
-const TABLES = ["users", "categories", "brainstorms", "cards", "favorites", "checklist_items", "comments", "votes", "history", "ai_analyses", "settings"];
+const TABLES = ["users", "categories", "brainstorms", "cards", "favorites", "checklist_items", "comments", "votes", "history", "ai_analyses", "reviews"];
 const KEEP_DAYS = 30;
 
 /** Kompletter Datenbestand als JSON (für Download und nächtliches Backup) */
 export async function buildExport(db: D1Database): Promise<string> {
-  const out: Record<string, unknown> = { exportiert_am: nowIso(), version: 1 };
+  const out: Record<string, unknown> = { exportiert_am: nowIso(), version: 2 };
   for (const t of TABLES) out[t] = (await db.prepare(`SELECT * FROM ${t}`).all()).results;
+  // Einstellungen ohne serverinterne Schlüssel (Push-Signatur)
+  out.settings = (await db.prepare("SELECT * FROM settings WHERE key NOT LIKE 'vapid_%'").all()).results;
+  // Fotos: Metadaten und – falls in der Datenbank gespeichert – Bilddaten als Hex
+  out.attachments = (
+    await db.prepare("SELECT id, card_id, user_id, created_at, mime, size, name, r2_key, hex(data) AS data_hex FROM attachments").all()
+  ).results;
   return JSON.stringify(out, null, 2);
 }
 

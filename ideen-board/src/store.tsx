@@ -53,6 +53,8 @@ export function StoreProvider({ initial, children }: { initial: BoardData; child
     try {
       const res = await api<BoardData | { unchanged: true; rev: number }>(`/board?rev=${revRef.current}`);
       if ("unchanged" in res) return;
+      // Eine ältere, später eingetroffene Antwort darf neuere Daten nicht überschreiben
+      if (res.rev < revRef.current) return;
       revRef.current = res.rev;
       setData(res);
     } catch {

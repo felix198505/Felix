@@ -200,7 +200,8 @@ async function moveCard(c: C, card: Card, column: ColumnKey, position: number | 
     let detail = `${columnTitle(card.column_key)} → ${columnTitle(column)}`;
     if (column === "verworfen" && rejectReason) detail += ` (Grund: ${rejectReason})`;
     await addHistory(db, card.id, c.get("user"), "verschoben", detail);
-    if (card.column_key === "entscheiden") await db.prepare("DELETE FROM votes WHERE card_id = ?").bind(card.id).run();
+    // Stimmen gelten nur für eine Entscheidungsrunde
+    if (card.column_key === "entscheiden" || column === "entscheiden") await db.prepare("DELETE FROM votes WHERE card_id = ?").bind(card.id).run();
   }
 }
 
@@ -239,6 +240,9 @@ api.delete("/cards/:id", async (c) => {
 api.post("/cards/:id/restore", async (c) => {
   const db = c.env.DB;
   const id = idParam(c);
+  const card = await loadCard(db, id);
+  if (!card) return bad(c, "Karte nicht gefunden (endgültig gelöscht?)", 404);
+  if (!card.deleted_at) return c.json(card);
   await db.prepare("UPDATE cards SET deleted_at = NULL, deleted_by = NULL, updated_at = ? WHERE id = ?").bind(nowIso(), id).run();
   await addHistory(db, id, c.get("user"), "wiederhergestellt", "Aus dem Papierkorb geholt");
   return c.json(await loadCard(db, id));
@@ -250,21 +254,30 @@ api.get("/trash", async (c) => {
 });
 
 /** Endgültig löschen – samt Kommentaren, Checkliste, Fotos, Verlauf und KI-Analysen */
-export async function purgeCard(env: AppEnv["Bindings"], id: number): Promise<void> {
+export async function purgeCard(env: AppEnv["Bindings"], id: number): Promise<boolean> {
   const db = env.DB;
+  // Nur Karten, die wirklich im Papierkorb liegen (jemand könnte sie gerade wiederhergestellt haben)
+  const row = await db.prepare("SELECT deleted_at FROM cards WHERE id = ?").bind(id).first<{ deleted_at: string | null }>();
+  if (!row?.deleted_at) return false;
+  // In diese Karte zusammengeführte Karten gehören zu ihr und werden mit entfernt
+  const merged = await db.prepare("SELECT id FROM cards WHERE merged_into = ?").bind(id).all<{ id: number }>();
+  for (const m of merged.results) {
+    await db.prepare("UPDATE cards SET deleted_at = COALESCE(deleted_at, ?) WHERE id = ?").bind(row.deleted_at, m.id).run();
+    await purgeCard(env, m.id);
+  }
   if (env.BACKUPS) {
     const keys = await db.prepare("SELECT r2_key FROM attachments WHERE card_id = ? AND r2_key IS NOT NULL").bind(id).all<{ r2_key: string }>();
     for (const k of keys.results) await env.BACKUPS.delete(k.r2_key);
   }
   await db.batch([
-    db.prepare("UPDATE cards SET merged_into = NULL WHERE merged_into = ?").bind(id),
     ...["attachments", "comments", "checklist_items", "favorites", "votes", "history", "ai_analyses"].map((t) => db.prepare(`DELETE FROM ${t} WHERE card_id = ?`).bind(id)),
     db.prepare("DELETE FROM cards WHERE id = ? AND deleted_at IS NOT NULL").bind(id),
   ]);
+  return true;
 }
 
 api.delete("/trash/:id", async (c) => {
-  await purgeCard(c.env, idParam(c));
+  if (!(await purgeCard(c.env, idParam(c)))) return bad(c, "Karte liegt nicht (mehr) im Papierkorb");
   return c.json({ ok: true });
 });
 
@@ -342,6 +355,7 @@ api.post("/cards/:id/vote", async (c) => {
   if (!["ja", "nein", "parken"].includes(vote)) return bad(c, "Ungültige Stimme");
   const me = c.get("user");
   if (!VOTERS.includes(me)) return bad(c, "Keine Berechtigung zum Abstimmen");
+  if (card.column_key !== "entscheiden" || card.deleted_at || card.merged_into) return bad(c, "Diese Karte steht nicht (mehr) zur Entscheidung");
   await db
     .prepare(
       "INSERT INTO votes (card_id, user_id, vote, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(card_id, user_id) DO UPDATE SET vote = excluded.vote, created_at = excluded.created_at",
@@ -386,16 +400,18 @@ api.post("/cards/:id/merge", async (c) => {
   const { source_ids } = await c.req.json<{ source_ids: number[] }>();
   const target = await loadCard(db, targetId);
   if (!target) return bad(c, "Karte nicht gefunden", 404);
+  if (target.merged_into || target.deleted_at) return bad(c, "In diese Karte kann nicht zusammengeführt werden (archiviert oder gelöscht)");
   const me = c.get("user");
   let description = target.description;
   for (const sid of source_ids ?? []) {
     if (sid === targetId) continue;
     const src = await loadCard(db, sid);
-    if (!src || src.merged_into) continue;
+    if (!src || src.merged_into || src.deleted_at) continue;
     description += `\n\n— Zusammengeführt aus „${src.title}“ —${src.description ? "\n" + src.description : ""}`;
     await db.batch([
       db.prepare("UPDATE comments SET card_id = ? WHERE card_id = ?").bind(targetId, sid),
       db.prepare("UPDATE checklist_items SET card_id = ? WHERE card_id = ?").bind(targetId, sid),
+      db.prepare("UPDATE attachments SET card_id = ? WHERE card_id = ?").bind(targetId, sid),
       db.prepare("INSERT OR IGNORE INTO favorites (card_id, user_id) SELECT ?, user_id FROM favorites WHERE card_id = ?").bind(targetId, sid),
       db.prepare("DELETE FROM votes WHERE card_id = ?").bind(sid),
       db.prepare("UPDATE cards SET merged_into = ?, updated_at = ? WHERE id = ?").bind(targetId, nowIso(), sid),
@@ -421,7 +437,8 @@ api.post("/cards/:id/merge", async (c) => {
 api.post("/cards/:id/analyze", async (c) => {
   const db = c.env.DB;
   const id = idParam(c);
-  await db.prepare("UPDATE cards SET ai_status = 'pending', ai_error = NULL, ai_attempts = 0 WHERE id = ?").bind(id).run();
+  const r = await db.prepare("UPDATE cards SET ai_status = 'pending', ai_error = NULL, ai_attempts = 0 WHERE id = ? AND ai_status != 'running'").bind(id).run();
+  if (r.meta.changes !== 1) return bad(c, "Die KI analysiert diese Karte gerade schon");
   await addHistory(db, id, c.get("user"), "ki-analyse", "Neue Analyse angefordert");
   kickAnalysis(c, id, c.get("user"));
   return c.json(await loadCard(db, id));
@@ -511,7 +528,7 @@ api.post("/brainstorms/:id/status", async (c) => {
   if (status === "sortieren") {
     // Sammeln abgeschlossen: jetzt alle Ideen analysieren und bündeln
     await db.prepare("UPDATE cards SET ai_status = 'pending' WHERE brainstorm_id = ? AND ai_status = 'deferred'").bind(bid).run();
-    await db.prepare("UPDATE brainstorms SET ai_status = 'pending', ai_error = NULL WHERE id = ?").bind(bid).run();
+    await db.prepare("UPDATE brainstorms SET ai_status = 'pending', ai_error = NULL, ai_attempts = 0 WHERE id = ? AND ai_status != 'running'").bind(bid).run();
     kickBrainstorm(c, bid);
   }
   return c.json({ ok: true });
@@ -519,7 +536,7 @@ api.post("/brainstorms/:id/status", async (c) => {
 
 api.post("/brainstorms/:id/reanalyze", async (c) => {
   const bid = idParam(c);
-  await c.env.DB.prepare("UPDATE brainstorms SET ai_status = 'pending', ai_error = NULL WHERE id = ?").bind(bid).run();
+  await c.env.DB.prepare("UPDATE brainstorms SET ai_status = 'pending', ai_error = NULL, ai_attempts = 0 WHERE id = ? AND ai_status != 'running'").bind(bid).run();
   kickBrainstorm(c, bid);
   return c.json({ ok: true });
 });
@@ -566,6 +583,7 @@ api.get("/export.json", async (c) => {
 api.get("/backups", async (c) => c.json(await listBackups(c.env)));
 
 api.get("/backups/:key", async (c) => {
+  if (!/^backup-\d{4}-\d{2}-\d{2}\.json$/.test(c.req.param("key"))) return bad(c, "Ungültiger Name", 404);
   const body = await getBackup(c.env, c.req.param("key"));
   if (!body) return bad(c, "Sicherung nicht gefunden", 404);
   return new Response(body, {
