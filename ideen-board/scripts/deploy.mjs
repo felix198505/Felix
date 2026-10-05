@@ -29,6 +29,14 @@ function run(cmd, args, env = {}) {
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(" ")} ist fehlgeschlagen`);
 }
 
+// 0) Automatische Tests – schlägt einer fehl, wird nicht veröffentlicht.
+//    Notfalls überspringen mit der Build-Variable SKIP_TESTS=1.
+if (process.env.SKIP_TESTS === "1") console.warn("⚠ Tests übersprungen (SKIP_TESTS=1)");
+else {
+  run("npm", ["test"]);
+  console.log("✓ Alle Tests bestanden");
+}
+
 const stripComments = (s) => s.replace(/^\s*\/\/.*$/gm, "");
 const config = JSON.parse(stripComments(readFileSync("wrangler.jsonc", "utf8")));
 

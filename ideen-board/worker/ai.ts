@@ -429,6 +429,9 @@ Analysiere die Idee und speichere das Ergebnis mit „analyse_speichern“.`;
       quellen: [...new Map(infos.flatMap((x) => x.quellen).map((s) => [s.url, s])).values()],
     };
 
+    // Während der Analyse endgültig gelöscht oder durch Zurückspielen ersetzt? Dann Ergebnis verwerfen.
+    const still = await db.prepare("SELECT ai_started_at FROM cards WHERE id = ?").bind(cardId).first<{ ai_started_at: string | null }>();
+    if (!still) return;
     const version = ((await db.prepare("SELECT MAX(version) AS v FROM ai_analyses WHERE card_id = ?").bind(cardId).first<{ v: number | null }>())?.v ?? 0) + 1;
     await db
       .prepare("INSERT INTO ai_analyses (card_id, version, created_at, requested_by, model, data, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?)")

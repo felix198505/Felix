@@ -4,3 +4,4 @@ dist
 .dev.vars
 *.local
 wrangler.deploy.jsonc
+wrangler.test.json

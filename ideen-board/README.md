@@ -107,6 +107,18 @@ Für die KI lokal `ANTHROPIC_API_KEY=…` in `.dev.vars` eintragen. Den Zeitplan
 
 ---
 
+## Automatische Tests
+
+`npm test` startet den Server lokal mit frischer Datenbank und einer nachgebauten KI. Es entstehen keine Kosten, und es werden keine Konten gebraucht. Geprüft werden:
+- Anmeldung
+- KI-Analyse samt Modellwahl, Quellenprüfung, Feedback und Kostengrenze
+- Abstimmung
+- Verschieben, Zusammenführen und Papierkorb
+- Export und Zurückspielen
+- Brainstorming, Import und Rückblick
+
+Die Tests laufen automatisch vor jeder Veröffentlichung (`npm run deploy`, also auch bei jedem Push über Cloudflare). Schlägt ein Test fehl, bleibt die bisherige Version online. Nur im Notfall lassen sie sich mit der Build-Variable `SKIP_TESTS=1` überspringen.
+
 ## Nutzer verwalten
 
 - **Passwort ändern:** Im Cloudflare-Dashboard unter Variablen und Geheimnisse `PASSWORD_FELIX` bzw. `PASSWORD_TIM` bearbeiten. Alle bestehenden Anmeldungen dieses Nutzers werden dadurch ungültig.

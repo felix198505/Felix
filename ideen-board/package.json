@@ -12,7 +12,8 @@
     "db:migrate:remote": "wrangler d1 migrations apply ideen-board --remote",
     "deploy": "node scripts/deploy.mjs",
     "hash-password": "node scripts/hash-password.mjs",
-    "cron:test": "curl \"http://localhost:5173/cdn-cgi/handler/scheduled?cron=*/10+*+*+*+*\""
+    "cron:test": "curl \"http://localhost:5173/cdn-cgi/handler/scheduled?cron=*/10+*+*+*+*\"",
+    "test": "node --test --test-concurrency=1 test/app.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
