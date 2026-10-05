@@ -15,17 +15,24 @@ export function onUnauthorized(fn: () => void) {
 export async function api<T = unknown>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers["content-type"] = "application/json";
-  const res = await fetch("/api" + path, {
-    method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
-    headers,
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  let res: Response;
+  try {
+    res = await fetch("/api" + path, {
+      method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
+      headers,
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     credentials: "same-origin",
-  });
+    });
+  } catch {
+    throw new ApiError("Keine Verbindung zum Server", 0);
+  }
   if (res.status === 401 && path !== "/login") {
     unauthorizedHandler?.();
     throw new ApiError("Nicht angemeldet", 401);
   }
   const data = await res.json().catch(() => ({}));
+  // Antwort vom Service Worker statt vom Server (offline) erkennen
+  if (res.status === 503 && (data as { offline?: boolean }).offline) throw new ApiError("Keine Verbindung zum Server", 0);
   if (!res.ok) throw new ApiError((data as { error?: string }).error ?? `Fehler ${res.status}`, res.status);
   return data as T;
 }

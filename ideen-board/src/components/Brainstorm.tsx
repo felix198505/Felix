@@ -7,6 +7,7 @@ import { useStore } from "../store";
 import { fmtDate } from "../util";
 import { AiFlag, PrioBadge } from "./CardTile";
 import { MicButton } from "./Mic";
+import { sendOrQueue } from "../offline";
 
 export function BrainstormList({ go }: { go: (hash: string) => void }) {
   const { data, run } = useStore();
@@ -90,7 +91,12 @@ function Collect({ b, ideas }: { b: Brainstorm; ideas: Card[] }) {
           const t = text.trim();
           if (!t) return;
           setText("");
-          await run(() => api(`/brainstorms/${b.id}/ideas`, { body: { title: t } }));
+          const r = await sendOrQueue(`/brainstorms/${b.id}/ideas`, { title: t }, t).catch((e) => {
+            toast((e as Error).message, true);
+            return null;
+          });
+          if (r === "queued") toast("Offline gespeichert – wird später hochgeladen");
+          else if (r === "sent") await run(async () => undefined);
         }}
       >
         <div className="row">

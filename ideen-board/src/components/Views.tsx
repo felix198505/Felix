@@ -5,6 +5,7 @@ import { api } from "../api";
 import { Avatar, catVar } from "./Avatar";
 import { currentSubscription, disablePush, enablePush, pushSupported } from "../push";
 import { useStore } from "../store";
+import { clearSaved } from "../offline";
 import { fmtDate, isDue, todayStr } from "../util";
 import { AiFlag, CardTile, PrioBadge, StarButton, StuckBadge } from "./CardTile";
 
@@ -459,6 +460,7 @@ function AccountSection() {
             onClick={async () => {
               if (!confirm("Abmelden?")) return;
               await api("/logout", { method: "POST" });
+              clearSaved();
               location.reload();
             }}
           >

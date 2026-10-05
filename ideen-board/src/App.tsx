@@ -4,6 +4,8 @@ import type { BoardData } from "../shared/types";
 import { api, onUnauthorized } from "./api";
 import type { ApiError } from "./api";
 import { StoreProvider, useStore } from "./store";
+import { clearSaved, isNetworkError, loadSavedBoard, saveBoard, sendOrQueue } from "./offline";
+import { OfflineBar } from "./components/OfflineBar";
 import { Avatar } from "./components/Avatar";
 import { EMPTY_FILTERS, filtersActive, isDue } from "./util";
 import type { Filters } from "./util";
@@ -30,14 +32,23 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [needLogin, setNeedLogin] = useState(false);
 
+  const [startOffline, setStartOffline] = useState(false);
+
   async function load() {
     try {
       setError(null);
-      setData(await api<BoardData>("/board"));
+      const b = await api<BoardData>("/board");
+      saveBoard(b);
+      setStartOffline(false);
+      setData(b);
       setNeedLogin(false);
     } catch (e) {
       if ((e as ApiError).status === 401) setNeedLogin(true);
-      else setError((e as Error).message);
+      else if (isNetworkError(e) && loadSavedBoard()) {
+        // Ohne Netz: letzten bekannten Stand anzeigen
+        setStartOffline(true);
+        setData(loadSavedBoard()!.board);
+      } else setError((e as Error).message);
     }
   }
   useEffect(() => {
@@ -64,7 +75,7 @@ export default function App() {
   }
   if (!data) return <div className="login muted">Lade…</div>;
   return (
-    <StoreProvider key={data.me} initial={data}>
+    <StoreProvider key={data.me} initial={data} initialOffline={startOffline}>
       <Shell />
     </StoreProvider>
   );
@@ -94,8 +105,15 @@ function Shell() {
     const title = quick.trim();
     if (!title) return;
     setQuick("");
-    await run(() => api("/cards", { body: { title } }));
-    toast("Im Eingang gespeichert ✓");
+    const r = await sendOrQueue("/cards", { title }, title).catch((e) => {
+      toast((e as Error).message, true);
+      return null;
+    });
+    if (r === "queued") toast("Offline gespeichert – wird hochgeladen, sobald wieder Netz da ist");
+    else if (r === "sent") {
+      await run(async () => undefined);
+      toast("Im Eingang gespeichert ✓");
+    }
   }
 
   const navBtn = (key: string, label: string, badge?: number, red?: boolean) => (
@@ -107,6 +125,7 @@ function Shell() {
 
   return (
     <>
+      <OfflineBar />
       <header className="topbar no-print">
         <div className="brand">
           <div className="logo">✦</div>
@@ -161,6 +180,7 @@ function UserMenu({ me }: { me: string }) {
         onClick={async () => {
           if (!confirm("Abmelden?")) return;
           await api("/logout", { method: "POST" });
+          clearSaved();
           location.reload();
         }}
       >

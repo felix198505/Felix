@@ -159,6 +159,7 @@ Es gibt vier Sicherungsebenen:
 - **Wochenüberblick montags** (05:47 UTC, also ca. 7:47 Uhr): Der Rückblick wird automatisch erstellt und per Push sowie, wenn eingerichtet, per E-Mail an alle verschickt.
 - **Push-Benachrichtigungen:** ⚙ Einstellungen → „Benachrichtigungen auf diesem Gerät“. Sie kommen bei neuen Kommentaren, wenn deine Stimme fehlt, bei Entscheidungen und montags. Am iPhone erst die App zum Home-Bildschirm hinzufügen und von dort öffnen.
 - **Pipedrive:** In jeder Karte „Als Aufgabe in Pipedrive anlegen“, wenn eingerichtet (siehe unten).
+- **Offline am Handy:** Ohne Netz zeigt die App den letzten bekannten Stand (gelbe Leiste oben). Neue Ideen aus der Schnellerfassung und dem Brainstorming werden auf dem Gerät zwischengespeichert und automatisch hochgeladen, sobald wieder Netz da ist. Andere Änderungen gehen erst wieder mit Netz. Die App selbst startet offline, sobald sie einmal mit Netz geöffnet wurde.
 - **Kosten-Anzeige:** ⚙ Einstellungen zeigt die KI-Kosten des Monats im Verhältnis zur Monatsgrenze.
 
 ### KI-Analyse
