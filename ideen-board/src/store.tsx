@@ -14,8 +14,11 @@ interface Store {
   toast: (msg: string, err?: boolean, action?: ToastAction) => void;
   openCard: (id: number | null) => void;
   openCardId: number | null;
-  askText: (title: string, opts?: { placeholder?: string; initial?: string; okLabel?: string }) => Promise<string | null>;
+  askText: (title: string, opts?: AskOpts) => Promise<string | null>;
 }
+
+/** optional: leere Eingabe erlaubt */
+type AskOpts = { placeholder?: string; initial?: string; okLabel?: string; optional?: boolean };
 
 type ToastAction = { label: string; run: () => void };
 
@@ -33,13 +36,7 @@ export function StoreProvider({ initial, children }: { initial: BoardData; child
   const [data, setData] = useState(initial);
   const [toastMsg, setToastMsg] = useState<{ msg: string; err: boolean; action?: ToastAction } | null>(null);
   const [openCardId, setOpenCardId] = useState<number | null>(null);
-  const [dialog, setDialog] = useState<null | {
-    title: string;
-    placeholder?: string;
-    initial?: string;
-    okLabel?: string;
-    resolve: (v: string | null) => void;
-  }>(null);
+  const [dialog, setDialog] = useState<null | (AskOpts & { title: string; resolve: (v: string | null) => void })>(null);
   const revRef = useRef(initial.rev);
   const toastTimer = useRef<number>(undefined);
 
@@ -94,7 +91,7 @@ export function StoreProvider({ initial, children }: { initial: BoardData; child
   );
 
   const askText = useCallback(
-    (title: string, opts: { placeholder?: string; initial?: string; okLabel?: string } = {}) =>
+    (title: string, opts: AskOpts = {}) =>
       new Promise<string | null>((resolve) => setDialog({ title, ...opts, resolve })),
     [],
   );
@@ -147,7 +144,7 @@ export function StoreProvider({ initial, children }: { initial: BoardData; child
   );
 }
 
-function TextDialog(props: { title: string; placeholder?: string; initial?: string; okLabel?: string; onClose: (v: string | null) => void }) {
+function TextDialog(props: AskOpts & { title: string; onClose: (v: string | null) => void }) {
   const [v, setV] = useState(props.initial ?? "");
   return (
     <div className="modal-back" style={{ alignItems: "center", zIndex: 80 }} onClick={() => props.onClose(null)}>
@@ -157,7 +154,7 @@ function TextDialog(props: { title: string; placeholder?: string; initial?: stri
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
-          if (v.trim()) props.onClose(v.trim());
+          if (v.trim() || props.optional) props.onClose(v.trim());
         }}
       >
         <div className="modal-body">
@@ -167,7 +164,7 @@ function TextDialog(props: { title: string; placeholder?: string; initial?: stri
             <button type="button" className="btn" onClick={() => props.onClose(null)}>
               Abbrechen
             </button>
-            <button type="submit" className="btn primary" disabled={!v.trim()}>
+            <button type="submit" className="btn primary" disabled={!v.trim() && !props.optional}>
               {props.okLabel ?? "OK"}
             </button>
           </div>

@@ -85,6 +85,7 @@ ALLE AKTIVEN KARTEN AUF DEM BOARD
 ${lines.join("\n") || "(keine)"}
 
 Erstelle einen kurzen Wochenrückblick für das Team. Nenne nur Karten-Nummern, die oben vorkommen. Lieber wenige, treffende Punkte als viele. Leere Listen sind in Ordnung.`,
+    tier: "main",
     tools: [REVIEW_TOOL],
     toolName: "rueckblick_speichern",
     maxTokens: 12000,
@@ -172,6 +173,7 @@ ${t.slice(0, 120000)}
 """
 
 Finde alle konkreten Ideen, Vorschläge und Verbesserungen, die im Gespräch genannt werden – auch beiläufige. Keine Aufgaben aus dem Tagesgeschäft (z. B. „Herrn Meier zurückrufen“), nur Ideen, die das Unternehmen weiterbringen. Wenn eine Idee schon als Karte existiert, trage deren Nummer bei aehnlich_karte_id ein.`,
+    tier: "fast",
     tools: [TRANSCRIPT_TOOL],
     toolName: "ideen_speichern",
     maxTokens: 12000,

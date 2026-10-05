@@ -168,6 +168,8 @@ Es gibt drei Sicherungsebenen:
 - Schätzungen sind gelb als **Schätzung** markiert. Quellen werden nur angezeigt, wenn die Websuche sie tatsächlich gefunden hat; erfundene Links werden automatisch entfernt.
 - **Neu analysieren** z. B. nach neuen Kommentaren. Frühere Fassungen bleiben unter „Fassung“ abrufbar.
 - Der **Firmenkontext** aus den Einstellungen wird bei jeder Analyse mitgegeben.
+- **Zwei Modelle:** Ideen im Eingang (und Parkplatz/Verworfen), Brainstorming und Import analysiert das schnelle, günstige Modell (Claude Sonnet 5.5). Wandert eine Karte ins Ausarbeiten oder Entscheiden, folgt automatisch eine gründliche Analyse mit Claude Opus 5.5. In der Karte geht das jederzeit auch per „✦ Gründlich“. Andere Modelle lassen sich mit `AI_MODEL` bzw. `AI_MODEL_FAST` einstellen.
+- **Die KI lernt mit:** Unter jeder Analyse 👍/👎 mit kurzem Kommentar. Die letzten 10 Rückmeldungen und die „Hinweise an die KI“ aus den Einstellungen fließen in jede neue Analyse ein, z. B. Region, Stundensätze oder was ihr nicht wollt.
 
 ---
 

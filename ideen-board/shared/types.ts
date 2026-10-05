@@ -144,7 +144,7 @@ export interface BoardData {
   categories: Category[];
   brainstorms: Brainstorm[];
   users: { id: string; name: string; email: string | null }[];
-  settings: { mail_enabled: boolean; pipedrive_enabled: boolean; month_cost_eur: number; examples_seeded: boolean; company_context: string; ai_monthly_limit_eur: string; ai_enabled: boolean; ai_model: string };
+  settings: { mail_enabled: boolean; pipedrive_enabled: boolean; month_cost_eur: number; examples_seeded: boolean; company_context: string; ai_monthly_limit_eur: string; ai_enabled: boolean; ai_model: string; ai_model_fast: string; ai_guidance: string };
 }
 
 // ---- KI-Analyse ----
@@ -176,6 +176,14 @@ export interface AiAnalysisData {
 
 export type AiItemState = Record<string, "uebernommen" | "verworfen">;
 
+export interface AiFeedback {
+  analysis_id: number;
+  user_id: string;
+  rating: 1 | -1;
+  comment: string;
+  created_at: string;
+}
+
 export interface AiAnalysis {
   id: number;
   card_id: number;
@@ -186,6 +194,7 @@ export interface AiAnalysis {
   data: AiAnalysisData;
   item_state: AiItemState;
   cost_usd: number;
+  feedback?: AiFeedback[];
 }
 
 export interface Attachment {

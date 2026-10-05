@@ -19,15 +19,15 @@ const PRICES: Record<string, { in: number; out: number }> = {
 const USD_PER_SEARCH = 0.01;
 const EUR_PER_USD = 0.92; // grobe Umrechnung für die Monatsgrenze
 
-export type AiJob = { type: "card"; id: number; by: string | null } | { type: "brainstorm"; id: number };
+export type AiJob = { type: "card"; id: number; by: string | null; deep?: boolean } | { type: "brainstorm"; id: number };
 
 // ---------------------------------------------------------------------------
 // Auslösen
 
 /** Stellt eine Analyse in die Warteschlange. Schlägt das fehl, holt der Zeitplan sie später nach. */
-export function kickAnalysis(c: Context<AppEnv>, cardId: number, requestedBy: string | null): void {
+export function kickAnalysis(c: Context<AppEnv>, cardId: number, requestedBy: string | null, deep = false): void {
   if (!c.env.ANTHROPIC_API_KEY) return;
-  const job: AiJob = { type: "card", id: cardId, by: requestedBy };
+  const job: AiJob = { type: "card", id: cardId, by: requestedBy, deep };
   c.executionCtx.waitUntil(enqueue(c.env, [job]).catch((e) => console.error("Queue", e)));
 }
 
@@ -37,7 +37,7 @@ async function enqueue(env: Env, jobs: AiJob[]): Promise<void> {
     await env.AI_QUEUE.sendBatch(jobs.map((body) => ({ body })));
     return;
   }
-  for (const j of jobs) await (j.type === "card" ? analyzeCard(env, j.id, j.by) : analyzeBrainstorm(env, j.id)).catch((e) => console.error(e));
+  for (const j of jobs) await (j.type === "card" ? analyzeCard(env, j.id, j.by, j.deep) : analyzeBrainstorm(env, j.id)).catch((e) => console.error(e));
 }
 
 export function kickBrainstorm(c: Context<AppEnv>, brainstormId: number): void {
@@ -56,7 +56,7 @@ export function kickBrainstorm(c: Context<AppEnv>, brainstormId: number): void {
 export async function handleQueue(batch: MessageBatch<AiJob>, env: Env): Promise<void> {
   for (const msg of batch.messages) {
     try {
-      if (msg.body.type === "card") await analyzeCard(env, msg.body.id, msg.body.by);
+      if (msg.body.type === "card") await analyzeCard(env, msg.body.id, msg.body.by, msg.body.deep);
       else await analyzeBrainstorm(env, msg.body.id);
       msg.ack();
     } catch (e) {
@@ -109,8 +109,31 @@ function client(env: Env) {
   return new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, baseURL: env.ANTHROPIC_BASE_URL || undefined, maxRetries: 1, timeout: 3 * 60 * 1000 });
 }
 
-function modelOf(env: Env) {
-  return env.AI_MODEL || DEFAULT_MODEL;
+export const DEFAULT_FAST_MODEL = "claude-sonnet-5-5";
+export type ModelTier = "main" | "fast";
+
+/** Gründliches Modell (Opus) für Ausgearbeitetes, schnelles/günstiges Modell (Sonnet) für den Eingang und Massenarbeit */
+export function modelFor(env: Env, tier: ModelTier): string {
+  return tier === "fast" ? env.AI_MODEL_FAST || DEFAULT_FAST_MODEL : env.AI_MODEL || DEFAULT_MODEL;
+}
+
+/** Spalten, in denen das günstige Modell reicht */
+export const FAST_COLUMNS = ["eingang", "parkplatz", "verworfen"];
+
+/** Rückmeldungen und Hinweise des Teams als Prompt-Abschnitt */
+export async function teamGuidance(db: D1Database): Promise<string> {
+  const hints = ((await getSetting(db, "ai_guidance")) ?? "").trim();
+  const fb = await db
+    .prepare(
+      `SELECT f.rating, f.comment, f.user_id, json_extract(a.data, '$.kurzfassung') AS k FROM ai_feedback f
+       JOIN ai_analyses a ON a.id = f.analysis_id ORDER BY f.created_at DESC LIMIT 10`,
+    )
+    .all<{ rating: number; comment: string; user_id: string; k: string }>();
+  const lines = fb.results.map((f) => `- ${f.rating > 0 ? "👍 hilfreich" : "👎 nicht hilfreich"} (${userName(f.user_id)}) zu „${(f.k ?? "").slice(0, 80)}“${f.comment ? `: ${f.comment}` : ""}`);
+  let out = "";
+  if (hints) out += `\nHINWEISE DES TEAMS AN DIE KI (bitte beachten)\n${hints}\n`;
+  if (lines.length) out += `\nRÜCKMELDUNGEN DES TEAMS ZU FRÜHEREN ANALYSEN (daraus lernen)\n${lines.join("\n")}\n`;
+  return out;
 }
 
 function costUsd(model: string, usage: Anthropic.Beta.BetaUsage): number {
@@ -143,17 +166,27 @@ export async function budgetExceeded(db: D1Database): Promise<string | null> {
 export const SYSTEM_RULES = `Du bist ein nüchterner, praxisnaher Berater für einen kleinen deutschen Handwerksbetrieb.
 Du analysierst Ideen, die das Team (Felix, Tim und Kerstin) auf seinem Ideen-Board festhält.
 
-Regeln:
-- Schreibe auf Deutsch, klar, konkret und kurz. Keine Floskeln, kein Marketing-Sprech.
+Haltung:
+- Schreibe auf Deutsch, klar, konkret und kurz – so, wie ein erfahrener Kollege aus der Branche spricht. Keine Floskeln, kein Marketing-Sprech, keine allgemeinen Ratschläge, die für jede Firma gelten.
+- Beziehe dich auf den Firmenkontext: Produkte, Teamgröße, Region, Saison (Hauptsaison im Frühjahr und Sommer, ruhigere Montagezeit im Winter). Nenne konkrete Zahlen, Beispiele und Ansprechpartner statt „prüfen“ oder „recherchieren“.
 - Alles, was du lieferst, ist ein Vorschlag. Die Entscheidung trifft das Team.
+
+Ehrlichkeit:
 - Trenne Fakten von Annahmen. Jede Schätzung (Kosten, Zeit, Marktgröße, Wirkung) markierst du als Schätzung (ist_schaetzung = true) und nennst die Annahme dahinter.
 - Gib nichts als Tatsache aus, was du nicht belegen kannst. Wenn du etwas nicht weißt, sag es.
-- Nutze die Websuche nur, wenn aktuelle oder überprüfbare Informationen wirklich nötig sind (z. B. Förderprogramme, Preise, rechtliche Vorgaben, Anbieter). Höchstens 3 Suchen.
+- Nutze die Websuche, wenn aktuelle oder überprüfbare Informationen nötig sind (Förderprogramme, Preise, rechtliche Vorgaben, Normen, Anbieter). Höchstens 3 Suchen.
 - Gib Quellen nur an, wenn du sie in der Websuche tatsächlich gefunden hast – mit exakter URL. Erfinde keine Quellen.
-- Nächste Schritte: 3 bis 5 konkrete, sofort machbare Schritte in sinnvoller Reihenfolge, jeweils ein Satz, beginnend mit einem Verb.
+
+Inhalt:
+- Kosten in Euro netto, als Spanne (z. B. „800–1.500 €“). Zeit in Personentagen oder Wochen.
+- Nächste Schritte: 3 bis 5 konkrete, sofort machbare Schritte in sinnvoller Reihenfolge, jeweils ein Satz, beginnend mit einem Verb. Der erste Schritt soll diese Woche in unter 2 Stunden machbar sein.
 - Ergänzende Maßnahmen: 2 bis 5 Punkte, was zusätzlich sinnvoll wäre (z. B. Marketing, Abläufe, Partner, Werkzeuge).
-- Nutzen und Aufwand bewertest du jeweils von 1 (gering) bis 5 (sehr hoch), bezogen auf einen kleinen Handwerksbetrieb.
+- Nutzen (1–5) und Aufwand (1–5) bewertest du nach diesem Maßstab:
+  Nutzen 1 = kaum spürbar · 3 = spürbar (einige Tausend Euro mehr Umsatz/Ertrag pro Jahr oder 1–2 Stunden pro Woche gespart) · 5 = deutlich (über 20.000 € pro Jahr oder strategisch wichtig).
+  Aufwand 1 = unter einem Tag, kaum Kosten · 3 = einige Tage bis Wochen oder 1.000–5.000 € · 5 = Monate oder über 20.000 €.
+- Risiken und offene Fragen: nur, was vor einer Entscheidung wirklich geklärt sein muss.
 - Ähnliche Karten: Nenne nur Karten aus der mitgelieferten Board-Liste, die inhaltlich wirklich verwandt sind (gleiches Ziel oder starke Überschneidung). Wenn keine passt, leere Liste.
+- Berücksichtige die Rückmeldungen des Teams zu früheren Analysen und die Hinweise an die KI, falls vorhanden.
 - Schließe die Arbeit immer ab, indem du das Werkzeug „analyse_speichern“ genau einmal aufrufst.`;
 
 const ANALYSIS_TOOL = (categoryNames: string[]): Anthropic.Beta.BetaTool => ({
@@ -244,10 +277,10 @@ function searchedSources(content: Anthropic.Beta.BetaContentBlock[]): Map<string
  */
 export async function runUntilTool(
   env: Env,
-  params: { system: string; user: string | Anthropic.Beta.BetaContentBlockParam[]; tools: Anthropic.Beta.BetaToolUnion[]; toolName: string; maxTokens: number },
+  params: { tier: ModelTier; system: string; user: string | Anthropic.Beta.BetaContentBlockParam[]; tools: Anthropic.Beta.BetaToolUnion[]; toolName: string; maxTokens: number },
 ): Promise<{ input: unknown; content: Anthropic.Beta.BetaContentBlock[]; cost: number; model: string }> {
   const api = client(env);
-  const model = modelOf(env);
+  const model = modelFor(env, params.tier);
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: params.user }];
   const allContent: Anthropic.Beta.BetaContentBlock[] = [];
   let cost = 0;
@@ -296,7 +329,7 @@ function boardOverview(cards: Card[], selfId: number): string {
     .join("\n");
 }
 
-export async function analyzeCard(env: Env, cardId: number, requestedBy: string | null): Promise<void> {
+export async function analyzeCard(env: Env, cardId: number, requestedBy: string | null, deep = false): Promise<void> {
   const db = env.DB;
   const card = await loadCard(db, cardId);
   if (!card || card.merged_into || card.deleted_at || card.ai_status === "deferred") return;
@@ -324,6 +357,7 @@ export async function analyzeCard(env: Env, cardId: number, requestedBy: string 
       loadCards(db),
       db.prepare("SELECT data FROM ai_analyses WHERE card_id = ? ORDER BY version DESC LIMIT 1").bind(cardId).first<{ data: string }>(),
     ]);
+    const guidance = await teamGuidance(db);
     const catNames = cats.results.map((c) => c.name);
     const catName = card.category_id ? cats.results.find((c) => c.id === card.category_id)?.name : null;
 
@@ -343,11 +377,12 @@ ${comments.results.length ? comments.results.map((c) => `${userName(c.user_id)} 
 ${prev ? `\nFRÜHERE KI-KURZFASSUNG (zur Orientierung; berücksichtige neue Kommentare und Infos):\n${JSON.parse(prev.data).kurzfassung}\n` : ""}
 ANDERE KARTEN AUF DEM BOARD (für „ähnliche Karten“)
 ${boardOverview(all, card.id)}
-
+${guidance}
 Analysiere die Idee und speichere das Ergebnis mit „analyse_speichern“.`;
 
     const images = await loadImagesForAi(env, cardId);
     const out = await runUntilTool(env, {
+      tier: !deep && FAST_COLUMNS.includes(card.column_key) ? "fast" : "main",
       system: SYSTEM_RULES,
       user: images.length
         ? [
@@ -479,6 +514,7 @@ GESAMMELTE IDEEN
 ${ideas.map((c) => `#${c.id}: ${c.title}${c.description ? " – " + c.description : ""}`).join("\n")}
 
 Bündele die Ideen zu sinnvollen Themen (jede Idee genau einem Thema zuordnen, über die Nummer). Weise im Hinweis darauf hin, welche Ideen sich so stark überschneiden, dass man sie zusammenführen sollte. Schlage dann genau 3 weitere Ideen vor, die zum Thema noch fehlen. Speichere mit „buendelung_speichern“.`,
+      tier: "fast",
       tools: [BRAINSTORM_TOOL],
       toolName: "buendelung_speichern",
       maxTokens: 12000,

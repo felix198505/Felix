@@ -28,8 +28,10 @@ export interface Env {
   PIPEDRIVE_DOMAIN?: string;
   /** Nur für Tests: andere API-Adresse */
   ANTHROPIC_BASE_URL?: string;
-  /** Optional: anderes Modell, Standard claude-opus-5-5 */
+  /** Optional: gründliches Modell, Standard claude-opus-5-5 */
   AI_MODEL?: string;
+  /** Optional: günstiges Modell für Eingang, Brainstorming und Import, Standard claude-sonnet-5-5 */
+  AI_MODEL_FAST?: string;
 }
 
 export type AppEnv = { Bindings: Env; Variables: { user: string } };

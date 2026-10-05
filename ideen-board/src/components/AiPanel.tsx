@@ -15,11 +15,12 @@ export function AiPanel({ detail, reload, onMerge }: { detail: CardDetail; reloa
   const a: AiAnalysis | undefined = analyses[Math.min(versionIdx, analyses.length - 1)];
   const busy = card.ai_status === "pending" || card.ai_status === "running";
 
-  async function reanalyze() {
-    await run(() => api(`/cards/${card.id}/analyze`, { method: "POST" }));
+  async function reanalyze(deep = false) {
+    await run(() => api(`/cards/${card.id}/analyze`, { body: { deep } }));
     setVersionIdx(0);
-    toast("Neue KI-Analyse angefordert – die alte Fassung bleibt erhalten");
+    toast(deep ? "Gründliche Analyse angefordert" : "Neue KI-Analyse angefordert – die alte Fassung bleibt erhalten");
   }
+  const lastIsFast = analyses[0] && analyses[0].model !== data.settings.ai_model;
 
   return (
     <div className="ai-panel">
@@ -30,9 +31,16 @@ export function AiPanel({ detail, reload, onMerge }: { detail: CardDetail; reloa
         </span>
         <span className="spacer" />
         {data.settings.ai_enabled && card.ai_status !== "deferred" && !card.merged_into && (
-          <button className="btn ai small" disabled={busy} onClick={reanalyze} title="z. B. nach neuen Kommentaren oder Infos">
-            ↻ Neu analysieren
-          </button>
+          <>
+            {lastIsFast && (
+              <button className="btn ai small" disabled={busy} onClick={() => reanalyze(true)} title="Mit dem gründlichen Modell (Opus) neu analysieren">
+                ✦ Gründlich
+              </button>
+            )}
+            <button className="btn ai small" disabled={busy} onClick={() => reanalyze()} title="z. B. nach neuen Kommentaren oder Infos">
+              ↻ Neu analysieren
+            </button>
+          </>
         )}
       </div>
       <div className="ai-note">
@@ -52,7 +60,7 @@ export function AiPanel({ detail, reload, onMerge }: { detail: CardDetail; reloa
           {data.settings.ai_enabled && (
             <>
               {" "}
-              <button className="btn small" onClick={reanalyze}>
+              <button className="btn small" onClick={() => reanalyze()}>
                 Jetzt erneut versuchen
               </button>
             </>
@@ -160,7 +168,7 @@ function AnalysisBody({
   return (
     <div>
       <div className="small muted" style={{ marginBottom: 10 }}>
-        Fassung {a.version} · {fmtDateTime(a.created_at)}
+        Fassung {a.version} · {fmtDateTime(a.created_at)} · <span title={a.model}>{modelLabel(a.model)}</span>
         {a.requested_by ? ` · angefordert von ${userName(a.requested_by)}` : ""}
         {!isCurrent && " · ältere Fassung"}
       </div>
@@ -313,6 +321,7 @@ function AnalysisBody({
           <Sources list={d.quellen} />
         </div>
       )}
+      <Feedback a={a} reload={reload} />
     </div>
   );
 }
@@ -325,6 +334,51 @@ function Sources({ list }: { list: Source[] }) {
         <a key={s.url} href={s.url} target="_blank" rel="noreferrer noopener" title={s.url}>
           ↗ {s.titel || new URL(s.url).hostname}
         </a>
+      ))}
+    </div>
+  );
+}
+
+function modelLabel(model: string): string {
+  if (model.includes("opus") || model.includes("fable")) return "gründlich (Opus)";
+  if (model.includes("sonnet")) return "schnell (Sonnet)";
+  if (model.includes("haiku")) return "schnell (Haiku)";
+  return model;
+}
+
+/** Rückmeldung zur Analyse – fließt in künftige Analysen ein */
+function Feedback({ a, reload }: { a: AiAnalysis; reload: () => void }) {
+  const { me, run, askText } = useStore();
+  const mine = a.feedback?.find((f) => f.user_id === me);
+  const others = (a.feedback ?? []).filter((f) => f.user_id !== me);
+  async function rate(rating: 1 | -1) {
+    if (mine?.rating === rating) {
+      await run(() => api(`/analyses/${a.id}/feedback`, { body: { rating: 0 } }));
+      return reload();
+    }
+    const comment = await askText(rating > 0 ? "Was war besonders hilfreich? (optional)" : "Was hat gefehlt oder war falsch? Die KI lernt daraus.", {
+      placeholder: rating > 0 ? "z. B. konkrete Kosten, gute Schritte" : "z. B. zu allgemein, Kosten unrealistisch",
+      okLabel: "Senden",
+      optional: true,
+    });
+    if (comment === null) return;
+    await run(() => api(`/analyses/${a.id}/feedback`, { body: { rating, comment: comment.trim() } }), "Danke – fließt in künftige Analysen ein");
+    reload();
+  }
+  return (
+    <div className="ai-feedback">
+      <span className="small muted">War diese Analyse hilfreich?</span>
+      <button className={"btn small" + (mine?.rating === 1 ? " active" : "")} onClick={() => rate(1)}>
+        👍
+      </button>
+      <button className={"btn small" + (mine?.rating === -1 ? " active" : "")} onClick={() => rate(-1)}>
+        👎
+      </button>
+      {others.map((f) => (
+        <span key={f.user_id} className="small muted" title={f.comment}>
+          {userName(f.user_id)}: {f.rating > 0 ? "👍" : "👎"}
+          {f.comment ? ` „${f.comment.slice(0, 40)}${f.comment.length > 40 ? "…" : ""}“` : ""}
+        </span>
       ))}
     </div>
   );

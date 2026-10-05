@@ -4,7 +4,7 @@ import { assigneeLabel, ASSIGNEE_GROUPS, COLUMNS, columnTitle, priorityOf, PRIOR
 import type { AiItemState, Card, ColumnKey } from "../shared/types";
 import { addHistory, getRev, getSetting, loadBoard, loadCard, loadCardDetail, loadCards, nowIso, parseAnalysis, setSetting } from "./db";
 import type { AppEnv } from "./env";
-import { applyAiItem, kickAnalysis, kickBrainstorm } from "./ai";
+import { applyAiItem, FAST_COLUMNS, kickAnalysis, kickBrainstorm, modelFor } from "./ai";
 import { seedExamples } from "./examples";
 import { notify } from "./push";
 import { buildExport, getBackup, listBackups, nightlyBackup } from "./backup";
@@ -202,7 +202,22 @@ async function moveCard(c: C, card: Card, column: ColumnKey, position: number | 
     await addHistory(db, card.id, c.get("user"), "verschoben", detail);
     // Stimmen gelten nur für eine Entscheidungsrunde
     if (card.column_key === "entscheiden" || column === "entscheiden") await db.prepare("DELETE FROM votes WHERE card_id = ?").bind(card.id).run();
+    await maybeDeepen(c, card, column);
   }
+}
+
+/**
+ * Kommt eine Karte aus dem Eingang ins Ausarbeiten oder Entscheiden und wurde bisher nur
+ * mit dem schnellen Modell analysiert, folgt automatisch eine gründliche Analyse.
+ */
+async function maybeDeepen(c: C, card: Card, column: ColumnKey) {
+  if (!c.env.ANTHROPIC_API_KEY || FAST_COLUMNS.includes(column) || !FAST_COLUMNS.includes(card.column_key)) return;
+  if (card.ai_status === "running" || card.ai_status === "pending" || card.ai_status === "deferred") return;
+  const last = await c.env.DB.prepare("SELECT model FROM ai_analyses WHERE card_id = ? ORDER BY version DESC LIMIT 1").bind(card.id).first<{ model: string }>();
+  if (last && last.model === modelFor(c.env, "main")) return;
+  await c.env.DB.prepare("UPDATE cards SET ai_status = 'pending', ai_error = NULL, ai_attempts = 0 WHERE id = ? AND ai_status != 'running'").bind(card.id).run();
+  await addHistory(c.env.DB, card.id, null, "ki-analyse", "Gründliche Analyse angestoßen (Karte wird ausgearbeitet)");
+  kickAnalysis(c, card.id, null);
 }
 
 api.post("/cards/:id/move", async (c) => {
@@ -437,11 +452,31 @@ api.post("/cards/:id/merge", async (c) => {
 api.post("/cards/:id/analyze", async (c) => {
   const db = c.env.DB;
   const id = idParam(c);
+  const { deep } = await c.req.json<{ deep?: boolean }>().catch(() => ({ deep: false }));
   const r = await db.prepare("UPDATE cards SET ai_status = 'pending', ai_error = NULL, ai_attempts = 0 WHERE id = ? AND ai_status != 'running'").bind(id).run();
   if (r.meta.changes !== 1) return bad(c, "Die KI analysiert diese Karte gerade schon");
-  await addHistory(db, id, c.get("user"), "ki-analyse", "Neue Analyse angefordert");
-  kickAnalysis(c, id, c.get("user"));
+  await addHistory(db, id, c.get("user"), "ki-analyse", deep ? "Gründliche Analyse angefordert" : "Neue Analyse angefordert");
+  kickAnalysis(c, id, c.get("user"), !!deep);
   return c.json(await loadCard(db, id));
+});
+
+api.post("/analyses/:id/feedback", async (c) => {
+  const db = c.env.DB;
+  const a = await db.prepare("SELECT card_id FROM ai_analyses WHERE id = ?").bind(idParam(c)).first<{ card_id: number }>();
+  if (!a) return bad(c, "Analyse nicht gefunden", 404);
+  const { rating, comment } = await c.req.json<{ rating: number; comment?: string }>();
+  if (rating === 0) {
+    await db.prepare("DELETE FROM ai_feedback WHERE analysis_id = ? AND user_id = ?").bind(idParam(c), c.get("user")).run();
+  } else {
+    await db
+      .prepare(
+        "INSERT INTO ai_feedback (analysis_id, user_id, rating, comment, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(analysis_id, user_id) DO UPDATE SET rating = excluded.rating, comment = excluded.comment, created_at = excluded.created_at",
+      )
+      .bind(idParam(c), c.get("user"), rating > 0 ? 1 : -1, (comment ?? "").trim().slice(0, 500), nowIso())
+      .run();
+  }
+  await db.prepare("UPDATE cards SET updated_at = ? WHERE id = ?").bind(nowIso(), a.card_id).run();
+  return c.json(await loadCardDetail(db, a.card_id));
 });
 
 api.post("/analyses/:id/item", async (c) => {
@@ -490,8 +525,9 @@ api.delete("/categories/:id", async (c) => {
 // ---------- Einstellungen ----------
 
 api.put("/settings", async (c) => {
-  const body = await c.req.json<{ company_context?: string; ai_monthly_limit_eur?: string }>();
+  const body = await c.req.json<{ company_context?: string; ai_monthly_limit_eur?: string; ai_guidance?: string }>();
   if (body.company_context !== undefined) await setSetting(c.env.DB, "company_context", body.company_context);
+  if (body.ai_guidance !== undefined) await setSetting(c.env.DB, "ai_guidance", body.ai_guidance.slice(0, 3000));
   if (body.ai_monthly_limit_eur !== undefined) {
     const n = Number(body.ai_monthly_limit_eur);
     if (Number.isFinite(n) && n >= 0) await setSetting(c.env.DB, "ai_monthly_limit_eur", String(n));

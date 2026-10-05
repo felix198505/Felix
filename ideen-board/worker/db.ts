@@ -1,5 +1,6 @@
 import type {
   AiAnalysis,
+  AiFeedback,
   BoardData,
   Brainstorm,
   Card,
@@ -153,6 +154,8 @@ export async function loadBoard(env: Env, me: string): Promise<BoardData> {
       ai_monthly_limit_eur: s.ai_monthly_limit_eur ?? "10",
       ai_enabled: Boolean(env.ANTHROPIC_API_KEY),
       ai_model: env.AI_MODEL || "claude-opus-5-5",
+      ai_model_fast: env.AI_MODEL_FAST || "claude-sonnet-5-5",
+      ai_guidance: s.ai_guidance ?? "",
     },
   };
 }
@@ -160,16 +163,20 @@ export async function loadBoard(env: Env, me: string): Promise<BoardData> {
 export async function loadCardDetail(db: D1Database, id: number): Promise<CardDetail | null> {
   const card = await loadCard(db, id);
   if (!card) return null;
-  const [comments, history, analyses] = await db.batch([
+  const [comments, history, analyses, feedback] = await db.batch([
     db.prepare("SELECT * FROM comments WHERE card_id = ? ORDER BY created_at").bind(id),
     db.prepare("SELECT * FROM history WHERE card_id = ? ORDER BY created_at DESC, id DESC").bind(id),
     db.prepare("SELECT * FROM ai_analyses WHERE card_id = ? ORDER BY version DESC").bind(id),
+    db.prepare("SELECT f.* FROM ai_feedback f JOIN ai_analyses a ON a.id = f.analysis_id WHERE a.card_id = ?").bind(id),
   ]);
   return {
     card,
     attachments: await listAttachments(db, id),
     comments: comments.results as unknown as Comment[],
     history: history.results as unknown as HistoryEntry[],
-    analyses: (analyses.results as Record<string, unknown>[]).map(parseAnalysis),
+    analyses: (analyses.results as Record<string, unknown>[]).map((r) => ({
+      ...parseAnalysis(r),
+      feedback: (feedback.results as unknown as AiFeedback[]).filter((f) => f.analysis_id === r.id),
+    })),
   };
 }

@@ -178,10 +178,13 @@ export function SettingsView() {
         <div className="section">
           <h3>KI</h3>
           <div className="small muted" style={{ marginBottom: 8 }}>
-            Status: {data.settings.ai_enabled ? `aktiv (Modell ${data.settings.ai_model})` : "kein API-Schlüssel hinterlegt – Analysen werden gesammelt und später nachgeholt"}
+            Status: {data.settings.ai_enabled ? "aktiv" : "kein API-Schlüssel hinterlegt – Analysen werden gesammelt und später nachgeholt"}
+            <br />
+            Eingang, Brainstorming, Import: <b>{data.settings.ai_model_fast}</b> (schnell, günstig) · ab „Ausarbeiten“ und Wochenrückblick: <b>{data.settings.ai_model}</b> (gründlich). Beim Verschieben aus dem Eingang wird automatisch gründlich nachanalysiert.
           </div>
           <CostMeter used={data.settings.month_cost_eur} limit={Number(data.settings.ai_monthly_limit_eur) || 0} />
-          <label className="field">Monatsgrenze für KI-Kosten (€)</label>
+          <AiGuidance />
+                    <label className="field">Monatsgrenze für KI-Kosten (€)</label>
           <div className="row">
             <input type="number" min={0} step={1} value={limit} onChange={(e) => setLimit(e.target.value)} style={{ maxWidth: 140 }} />
             <button className="btn" disabled={limit === data.settings.ai_monthly_limit_eur} onClick={() => run(() => api("/settings", { method: "PUT", body: { ai_monthly_limit_eur: limit } }), "Gespeichert")}>
@@ -330,6 +333,28 @@ function Trash() {
           </div>
         ))
       )}
+    </div>
+  );
+}
+
+function AiGuidance() {
+  const { data, run } = useStore();
+  const [v, setV] = useState(data.settings.ai_guidance);
+  return (
+    <div style={{ margin: "8px 0 14px" }}>
+      <label className="field">Hinweise an die KI (gelten für jede Analyse)</label>
+      <textarea
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        rows={4}
+        placeholder={"z. B.\n- Wir sind im Raum Hannover tätig, Kunden sind meist Eigenheimbesitzer.\n- Kosten immer mit unseren Stundensätzen (65 €/h) rechnen.\n- Keine Vorschläge zu Social Media Werbung, das machen wir nicht."}
+      />
+      <div className="row" style={{ justifyContent: "space-between", marginTop: 6 }}>
+        <span className="small muted">Dazu lernt die KI aus euren 👍/👎-Rückmeldungen unter den Analysen.</span>
+        <button className="btn" disabled={v === data.settings.ai_guidance} onClick={() => run(() => api("/settings", { method: "PUT", body: { ai_guidance: v } }), "Gespeichert")}>
+          Speichern
+        </button>
+      </div>
     </div>
   );
 }
