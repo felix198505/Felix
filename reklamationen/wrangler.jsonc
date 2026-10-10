@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "reklamationen",
+  "workers_dev": true,
+  "preview_urls": false,
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "reklamationen",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "reklamationen-dateien" }],
+  "triggers": {
+    // täglich 05:13 UTC (ca. 7 Uhr): Erinnerungen · täglich 02:23 UTC: Sicherung
+    "crons": ["13 5 * * *", "23 2 * * *"]
+  },
+  "observability": { "enabled": true }
+}

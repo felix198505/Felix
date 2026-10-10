@@ -1,0 +1,52 @@
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
+}
+
+let unauthorizedHandler: (() => void) | null = null;
+export function onUnauthorized(fn: () => void) {
+  unauthorizedHandler = fn;
+}
+
+export async function api<T = unknown>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (opts.body !== undefined) headers["content-type"] = "application/json";
+  let res: Response;
+  try {
+    res = await fetch("/api" + path, {
+      method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
+      headers,
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    credentials: "same-origin",
+    });
+  } catch {
+    throw new ApiError("Keine Verbindung zum Server", 0);
+  }
+  if (res.status === 401 && path !== "/login") {
+    unauthorizedHandler?.();
+    throw new ApiError("Nicht angemeldet", 401);
+  }
+  const data = await res.json().catch(() => ({}));
+  // Antwort vom Service Worker statt vom Server (offline) erkennen
+  if (res.status === 503 && (data as { offline?: boolean }).offline) throw new ApiError("Keine Verbindung zum Server", 0);
+  if (!res.ok) throw new ApiError((data as { error?: string }).error ?? `Fehler ${res.status}`, res.status);
+  return data as T;
+}
+
+/** Datei hochladen (Fotos, PDF) */
+export async function upload<T>(path: string, file: Blob, name: string): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch("/api" + path, { method: "POST", body: file, headers: { "content-type": file.type, "x-filename": encodeURIComponent(name) }, credentials: "same-origin" });
+  } catch {
+    throw new ApiError("Keine Verbindung zum Server", 0);
+  }
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) unauthorizedHandler?.();
+  if (!res.ok) throw new ApiError((data as { error?: string }).error ?? `Fehler ${res.status}`, res.status);
+  return data as T;
+}

@@ -1,0 +1,7 @@
+# Nur für die lokale Entwicklung. Kopieren nach .dev.vars (wird nicht ins Git übernommen).
+# Lokales Passwort für alle: test
+SESSION_SECRET=lokal-nur-zum-testen-5f2c81d0a9
+PASSWORD_FELIX=test
+PASSWORD_KERSTIN=test
+PASSWORD_TIM=test
+IMPORT_TOKEN=lokal-import-schluessel

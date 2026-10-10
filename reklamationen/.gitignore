@@ -1,0 +1,12 @@
+node_modules
+dist
+.wrangler
+.dev.vars
+*.local
+wrangler.deploy.jsonc
+wrangler.test.json
+# Echte Falldaten nie ins Repo
+reklamationen-faelle*.json
+*faelle*.json
+export-*.json
+backup-*.json
